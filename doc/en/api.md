@@ -5,9 +5,10 @@ immutable nodes. The portable implementation uses C11 and caller-owned
 storage. Include [utf8.h](../../include/jb/utf8.h) for text operations and
 [json.h](../../include/jb/json.h) for JSON. Both headers also work in C++17.
 
-The functions below are implemented in the current prototype. Numeric
-conversions, a writer, JSON Pointer, JSON Schema and NFC are outside this API.
-Build instructions and platform `limits` are in [the test guide](testing.md).
+For exact conversions and C literals, see [numbers](numbers.md).
+For sequential output, see [the writer](writer.md). JSON Pointer, JSON Schema
+and NFC remain outside this prototype. Build instructions and platform limits
+are in [the test guide](testing.md).
 
 ## Common rules
 
@@ -215,7 +216,7 @@ storage may contain partial records. Do not navigate that result.
 **Example: read a boolean with fixed storage**
 
 Pass `{"enabled": true}` and its byte length to get `true` in `out_enabled`.
-A missing field returns `HAL_ENOENT`; `{"enabled": "true"}` returns `HAL_EINVAL`.
+A missing field returns `HAL_ENOENT`; `{"enabled": "true"}` returns `HAL_ETYPE`.
 The helper returns only the copied boolean, so no borrowed node escapes.
 The scratch size is checked against the implementation before parsing.
 
@@ -376,7 +377,7 @@ hal_status_t jb_json_count(jb_json_node_t node, size_t *out);
 ```
 
 Reports direct members for an object or direct items for an array. It does
-not count descendants. `out` is required. A scalar gives `HAL_EINVAL`;
+not count descendants. `out` is required. A scalar gives `HAL_ETYPE`;
 an empty container succeeds with zero.
 
 ### `jb_json_first`
@@ -386,7 +387,7 @@ hal_status_t jb_json_first(jb_json_node_t container, jb_json_node_t *out);
 ```
 
 Returns the first member/item in source order. `out` is required.
-An empty container returns `HAL_ENOENT`; a scalar returns `HAL_EINVAL`.
+An empty container returns `HAL_ENOENT`; a scalar returns `HAL_ETYPE`.
 
 ### `jb_json_next`
 
@@ -410,8 +411,8 @@ Finds an exact decoded, case-sensitive member name in an object.
 (`NULL`, 0) denotes an empty name. Embedded NUL is significant.
 For example, a stored `"\u0061"` is found with the one-byte key `"a"`.
 
-`out` is required. Missing names give `HAL_ENOENT`, a non-object or invalid
-pointer/length gives `HAL_EINVAL`, and invalid key UTF-8 gives `HAL_EPROTO`.
+`out` is required. Missing names give `HAL_ENOENT`, a non-object gives
+`HAL_ETYPE`, an invalid pointer/length gives `HAL_EINVAL`, and invalid key UTF-8 gives `HAL_EPROTO`.
 Lookup scans members and compares names without NFC or case folding.
 Repeated lookups over large objects should be bounded by the caller.
 
@@ -483,7 +484,7 @@ hal_status_t jb_json_at(jb_json_node_t array, size_t position,
 ```
 
 Returns an array item by zero-based position. `out` is required.
-An out-of-range position gives `HAL_ENOENT` and a non-array gives `HAL_EINVAL`.
+An out-of-range position gives `HAL_ENOENT` and a non-array gives `HAL_ETYPE`.
 The function scans earlier siblings, so it is linear in position.
 Use first/next for a full traversal instead of repeated at calls.
 
@@ -532,7 +533,7 @@ hal_status_t jb_json_number_token(jb_json_node_t node, jb_json_span_t *out);
 ```
 
 Borrows the original spelling of a number. `out` is required. A non-number,
-including a boolean or numeric string, gives `HAL_EINVAL`.
+including a boolean or numeric string, gives `HAL_ETYPE`.
 
 There is no integer or floating-point conversion. Tokens such as
 18446744073709551615, 9007199254740993.0 and 1e400 remain exact original
@@ -585,7 +586,7 @@ hal_status_t jb_json_get_bool(jb_json_node_t node, bool *out);
 ```
 
 Reads a JSON boolean into out, which is required. Only `true` and `false`
-are accepted. Numbers, strings and `null` return `HAL_EINVAL`; no truth-value
+are accepted. Numbers, strings and `null` return `HAL_ETYPE`; no truth-value
 coercion is performed. The parsing and array examples use this function.
 
 ### `jb_json_string_copy`
@@ -601,12 +602,13 @@ NUL. `required` is mandatory and excludes any terminator.
 
 (`NULL`, 0) measures and returns `HAL_OK`. A real buffer that is too small
 returns `HAL_EOVERFLOW`, receives no partial string, and required reports
-the full size. A non-string, missing required pointer or `NULL` buffer
-with nonzero capacity gives `HAL_EINVAL`.
+the full size. A non-string gives `HAL_ETYPE`. A missing required pointer
+or `NULL` buffer with nonzero capacity gives `HAL_EINVAL`.
 
-Do not print the result with `%s`. To create a C string, reserve an additional
-byte, check for embedded NUL and append the terminator yourself. Empty strings
-need zero data bytes; the `buffer` is not automatically cleared.
+Do not print the result with `%s`; the decoded bytes can contain NUL and have
+no terminator. `jb_json_string_cstr` below produces a C string when the value
+allows one. Empty strings need zero data bytes; the `buffer` is not
+automatically cleared.
 
 ### `jb_json_key_copy`
 
@@ -672,6 +674,41 @@ hal_status_t example_print_label(const jb_json_doc_t *doc) {
 }
 ```
 
+### `jb_json_string_equal`
+
+```c
+hal_status_t jb_json_string_equal(jb_json_node_t node, jb_json_span_t value,
+                                 bool *out);
+```
+
+Compares a string value with plain UTF-8 bytes after decoding its escapes
+and surrogate pairs, without copying, NFC or case folding. `value` is not
+JSON syntax: a stored `"a"` equals the one-byte value `a`. It may
+contain NUL, and (`NULL`, 0) is the empty string. `out` is required and
+receives `true` only for identical decoded bytes.
+
+A non-string gives `HAL_ETYPE`. Invalid UTF-8 anywhere in `value` gives
+`HAL_EPROTO`, even after an earlier difference. A `NULL` `value.data` with
+nonzero length or a missing `out` gives `HAL_EINVAL`. `out` is unchanged on
+failure.
+
+### `jb_json_string_cstr`
+
+```c
+hal_status_t jb_json_string_cstr(jb_json_node_t node, char *buffer,
+                                size_t capacity, size_t *required);
+```
+
+Decodes a string value and appends a NUL terminator. `required` is mandatory
+and includes the terminator, so an empty string requires one byte. (`NULL`, 0)
+measures and returns `HAL_OK`. A real buffer that is too small gives
+`HAL_EOVERFLOW`, receives nothing, and `required` reports the full size.
+
+A value containing U+0000 cannot be a C string. It gives `HAL_ETYPE` and
+leaves both outputs unchanged instead of truncating silently; read such data
+with `jb_json_string_copy`. A non-string also gives `HAL_ETYPE`. A missing
+`required` pointer or `NULL` `buffer` with nonzero capacity gives `HAL_EINVAL`.
+
 ## Results and ABI
 
 ### Operation results
@@ -679,14 +716,16 @@ hal_status_t example_print_label(const jb_json_doc_t *doc) {
 | Status | Meaning |
 | --- | --- |
 | `HAL_OK` | Operation completed and its outputs can be used. |
-| `HAL_EINVAL` | Invalid arguments or a read of the wrong JSON type. |
+| `HAL_EINVAL` | Invalid arguments. |
+| `HAL_ETYPE` | A read of the wrong JSON type or a value without the requested exact representation. |
 | `HAL_EPROTO` | Malformed JSON, invalid UTF-8/escapes, duplicate names or trailing data. |
 | `HAL_EOVERFLOW` | Capacity, configured work/data limit or size arithmetic overflow. |
 | `HAL_ESTATE` | Invalid document or node. |
 | `HAL_ENOENT` | Missing member/item or end of iteration. |
 
 All results use the existing `hal_status_t` from
-[status.h](../../include/jb/status.h). `HAL_ETYPE` is not implemented.
+[status.h](../../include/jb/status.h). `HAL_ETYPE` comes from that shared
+header; the prototype defines no result codes of its own.
 The host allocation example can also return `HAL_ENOMEM`; the display examples
 can return `HAL_EIO`. Those are errors of the example's allocation/output
 operations, not allocations or I/O performed by the portable parser.
@@ -788,9 +827,10 @@ hal_status_t example_json_error(void) {
 ### Layout and build profile
 
 The prototype uses natural layouts with 32/64-bit pointers and `size_t`,
-one-byte `bool` and a 32-bit status enum. CMake propagates `-fno-short-enums`
-on GCC/Clang, including ARM compilers whose default enum is smaller.
-Direct builds must use the same profile.
+one-byte `bool` and a 32-bit status enum. CMake propagates `HAL_STATUS_FIXED_32`,
+which selects a 32-bit status enum on GCC/Clang without changing other enum
+types or the toolchain's global ABI attributes. Direct builds must define it
+consistently before the first HAL status include. MSVC uses its native 32-bit enum.
 
 Header assertions reject incompatible packing, including packing opened
 before the first include. Tokens occupy 40 bytes on the 32-bit profile and

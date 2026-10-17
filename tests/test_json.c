@@ -239,6 +239,72 @@ static void test_all_escapes_and_surrogate_pair(void) {
   TEST_ASSERT_EQUAL_CHAR('!', output[needed]);
 }
 
+static void test_string_equal_and_cstr(void) {
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    parse("{\"a\":\"\\u0061\\u20ac\",\"n\":\"x\\u0000y\",\"e\":\"\",\"b\":true}"));
+  jb_json_node_t a, n, e, b;
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_find(root(), (jb_json_span_t){"a", 1}, &a));
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_find(root(), (jb_json_span_t){"n", 1}, &n));
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_find(root(), (jb_json_span_t){"e", 1}, &e));
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_find(root(), (jb_json_span_t){"b", 1}, &b));
+  bool equal = false;
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_string_equal(a, (jb_json_span_t){"a\xe2\x82\xac", 4}, &equal));
+  TEST_ASSERT_TRUE(equal);
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_string_equal(a, (jb_json_span_t){"a\xe2\x82\xac!", 5}, &equal));
+  TEST_ASSERT_FALSE(equal);
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_string_equal(a, (jb_json_span_t){"a", 1}, &equal));
+  TEST_ASSERT_FALSE(equal);
+  /* The comparison value is plain UTF-8, never JSON escape syntax. */
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    jb_json_string_equal(a, (jb_json_span_t){"\\u0061\xe2\x82\xac", 9}, &equal));
+  TEST_ASSERT_FALSE(equal);
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_string_equal(n, (jb_json_span_t){"x\0y", 3}, &equal));
+  TEST_ASSERT_TRUE(equal);
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_string_equal(n, (jb_json_span_t){"x\0z", 3}, &equal));
+  TEST_ASSERT_FALSE(equal);
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_string_equal(e, (jb_json_span_t){NULL, 0}, &equal));
+  TEST_ASSERT_TRUE(equal);
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_string_equal(e, (jb_json_span_t){"", 1}, &equal));
+  TEST_ASSERT_FALSE(equal);
+  equal = true;
+  TEST_ASSERT_EQUAL(HAL_EPROTO, jb_json_string_equal(a, (jb_json_span_t){"a\xff", 2}, &equal));
+  /* Invalid bytes after an earlier difference still fail the whole value. */
+  TEST_ASSERT_EQUAL(HAL_EPROTO, jb_json_string_equal(a, (jb_json_span_t){"b\xff", 2}, &equal));
+  TEST_ASSERT_EQUAL(HAL_ETYPE, jb_json_string_equal(b, (jb_json_span_t){"true", 4}, &equal));
+  TEST_ASSERT_EQUAL(HAL_EINVAL, jb_json_string_equal(a, (jb_json_span_t){NULL, 1}, &equal));
+  TEST_ASSERT_TRUE(equal);
+
+  char output[8];
+  memset(output, '!', sizeof(output));
+  size_t needed = 99;
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_string_cstr(a, NULL, 0, &needed));
+  TEST_ASSERT_EQUAL(5, needed);
+  needed = 99;
+  TEST_ASSERT_EQUAL(HAL_EOVERFLOW, jb_json_string_cstr(a, output, 4, &needed));
+  TEST_ASSERT_EQUAL(5, needed);
+  TEST_ASSERT_EQUAL_CHAR('!', output[0]);
+  needed = 99;
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_string_cstr(a, output, 5, &needed));
+  TEST_ASSERT_EQUAL(5, needed);
+  TEST_ASSERT_EQUAL_STRING("a\xe2\x82\xac", output);
+  TEST_ASSERT_EQUAL_CHAR('!', output[5]);
+  needed = 99;
+  TEST_ASSERT_EQUAL(HAL_ETYPE, jb_json_string_cstr(n, output, sizeof(output), &needed));
+  TEST_ASSERT_EQUAL(HAL_ETYPE, jb_json_string_cstr(n, NULL, 0, &needed));
+  TEST_ASSERT_EQUAL(99, needed);
+  TEST_ASSERT_EQUAL_STRING("a\xe2\x82\xac", output);
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_string_copy(n, output, sizeof(output), &needed));
+  TEST_ASSERT_EQUAL(3, needed);
+  TEST_ASSERT_EQUAL(HAL_EOVERFLOW, jb_json_string_cstr(e, output, 0, &needed));
+  TEST_ASSERT_EQUAL(1, needed);
+  output[0] = '!';
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_string_cstr(e, output, 1, &needed));
+  TEST_ASSERT_EQUAL(1, needed);
+  TEST_ASSERT_EQUAL_CHAR('\0', output[0]);
+  TEST_ASSERT_EQUAL(HAL_ETYPE, jb_json_string_cstr(b, output, sizeof(output), &needed));
+  TEST_ASSERT_EQUAL(1, needed);
+}
+
 static void test_escape_equivalent_duplicate_names_fail(void) {
   static const char *const bad[] = {"{\"a\":0,\"a\":1}", "{\"a\":0,\"\\u0061\":1}",
                                     "{\"\":0,\"\":1}", "{\"a\\u0000b\":0,\"a\\u0000b\":1}",
@@ -416,20 +482,28 @@ static void test_read_errors_leave_outputs_unchanged(void) {
   jb_json_node_t node = {&doc, 0};
   TEST_ASSERT_EQUAL(HAL_ENOENT, jb_json_first(root(), &node));
   TEST_ASSERT_EQUAL(0, node.index);
-  TEST_ASSERT_EQUAL(HAL_EINVAL, jb_json_find(root(), (jb_json_span_t){"x", 1}, &node));
+  TEST_ASSERT_EQUAL(HAL_ETYPE, jb_json_find(root(), (jb_json_span_t){"x", 1}, &node));
   size_t bytes = 99;
   bool boolean = true;
   jb_json_span_t span = {NULL, 99};
-  TEST_ASSERT_EQUAL(HAL_EINVAL, jb_json_get_bool(root(), &boolean));
+  TEST_ASSERT_EQUAL(HAL_ETYPE, jb_json_get_bool(root(), &boolean));
   TEST_ASSERT_TRUE(boolean);
-  TEST_ASSERT_EQUAL(HAL_EINVAL, jb_json_number_token(root(), &span));
+  TEST_ASSERT_EQUAL(HAL_ETYPE, jb_json_number_token(root(), &span));
   TEST_ASSERT_EQUAL(99, span.length);
   TEST_ASSERT_EQUAL(HAL_EINVAL, jb_json_key_copy(root(), NULL, 0, &bytes));
   TEST_ASSERT_EQUAL(99, bytes);
+  TEST_ASSERT_EQUAL(HAL_ETYPE, jb_json_string_cstr(root(), NULL, 0, &bytes));
+  TEST_ASSERT_EQUAL(99, bytes);
+  TEST_ASSERT_EQUAL(HAL_ETYPE, jb_json_string_equal(root(), (jb_json_span_t){"x", 1}, &boolean));
+  TEST_ASSERT_TRUE(boolean);
   node.index = doc.token_count;
   jb_json_type_t type = 99;
   TEST_ASSERT_EQUAL(HAL_ESTATE, jb_json_type(node, &type));
   TEST_ASSERT_EQUAL_UINT32(99, type);
+  TEST_ASSERT_EQUAL(HAL_ESTATE, jb_json_string_cstr(node, NULL, 0, &bytes));
+  TEST_ASSERT_EQUAL(HAL_ESTATE, jb_json_string_equal(node, (jb_json_span_t){"x", 1}, &boolean));
+  TEST_ASSERT_EQUAL(99, bytes);
+  TEST_ASSERT_TRUE(boolean);
   TEST_ASSERT_EQUAL(HAL_OK, parse("{}"));
   TEST_ASSERT_EQUAL(HAL_EPROTO, jb_json_find(root(), (jb_json_span_t){"\xff", 1}, &node));
   TEST_ASSERT_EQUAL(HAL_ENOENT, jb_json_find(root(), (jb_json_span_t){"x", 1}, &node));
@@ -457,6 +531,11 @@ static void test_required_arguments(void) {
   TEST_ASSERT_EQUAL(HAL_OK, parse("\"a\""));
   TEST_ASSERT_EQUAL(HAL_EINVAL, jb_json_string_copy(root(), NULL, 1, &bytes));
   TEST_ASSERT_EQUAL(HAL_EINVAL, jb_json_string_copy(root(), NULL, 0, NULL));
+  TEST_ASSERT_EQUAL(HAL_EINVAL, jb_json_string_cstr(root(), NULL, 1, &bytes));
+  TEST_ASSERT_EQUAL(HAL_EINVAL, jb_json_string_cstr(root(), NULL, 0, NULL));
+  bool equal;
+  TEST_ASSERT_EQUAL(HAL_EINVAL, jb_json_string_equal(root(), input, NULL));
+  TEST_ASSERT_EQUAL(HAL_EINVAL, jb_json_string_equal(root(), (jb_json_span_t){NULL, 1}, &equal));
   TEST_ASSERT_EQUAL(HAL_EINVAL, jb_json_root(NULL, &(jb_json_node_t){0}));
   TEST_ASSERT_EQUAL(HAL_EINVAL, jb_json_root(&doc, NULL));
   TEST_ASSERT_EQUAL(HAL_EINVAL, jb_json_raw(root(), NULL));
@@ -515,6 +594,7 @@ int main(void) {
   RUN_TEST(test_structure_offsets_and_constant_time_siblings);
   RUN_TEST(test_empty_and_nul_keys_and_values);
   RUN_TEST(test_all_escapes_and_surrogate_pair);
+  RUN_TEST(test_string_equal_and_cstr);
   RUN_TEST(test_escape_equivalent_duplicate_names_fail);
   RUN_TEST(test_measure_sizes_but_does_not_accept_duplicates);
   RUN_TEST(test_capacity_failure_invalidates_document);

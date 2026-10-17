@@ -1,0 +1,9 @@
+{
+  "name": "Ryu",
+  "repository": "https://github.com/ulfjack/ryu",
+  "revision": "4c0618b0e44f7ef027ebae05d2cc7812048f7c8f",
+  "license": "BSL-1.0",
+  "upstreamLicense": "Apache-2.0 OR BSL-1.0",
+  "files": "Unmodified f2s/d2s sources and headers for RYU_OPTIMIZE_SIZE",
+  "sha256": "SHA256SUMS"
+}

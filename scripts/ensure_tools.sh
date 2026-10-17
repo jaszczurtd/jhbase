@@ -1,0 +1,164 @@
+#!/usr/bin/env bash
+# Fetch, build and verify the gate tools pinned in third_party/*_version.conf:
+# Unity, cppcheck, PMD and the RISC-V toolchain. The pin files carry revisions
+# and digests only (JaszczurHAL reads the same files from its jhbase checkout);
+# the directory layout below the tools root (default .build/tools) is this
+# script's. Nothing is installed system-wide and the gate itself never
+# downloads. --check only verifies and names the repair step.
+set -euo pipefail
+jb_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+jb_tools="${JHBASE_TOOLS_ROOT:-${jb_root}/.build/tools}"
+jb_check=0
+jb_jobs="$(nproc 2>/dev/null || printf '4')"
+jb_selected=()
+while (($#)); do
+  case "$1" in
+    --check) jb_check=1; shift ;;
+    --tools-root) jb_tools="${2:?--tools-root needs a path}"; shift 2 ;;
+    -j) jb_jobs="${2:?missing job count}"; shift 2 ;;
+    -j[0-9]*) jb_jobs="${1#-j}"; shift ;;
+    --help)
+      printf '%s\n' 'Usage: scripts/ensure_tools.sh [--check] [--tools-root PATH] [-j N]' \
+        '       [unity|cppcheck|pmd|riscv-toolchain ...]   (default: all four)'
+      exit 0 ;;
+    -*) printf 'Unknown argument: %s\n' "$1" >&2; exit 2 ;;
+    *) jb_selected+=("$1"); shift ;;
+  esac
+done
+((${#jb_selected[@]})) || jb_selected=(unity cppcheck pmd riscv-toolchain)
+mkdir -p "$jb_tools"
+jb_tools="$(cd "$jb_tools" && pwd -P)"
+jb_stamp=.jhbase-component
+for jb_conf in unity cppcheck pmd riscv_toolchain; do
+  # shellcheck source=/dev/null
+  source "${jb_root}/third_party/${jb_conf}_version.conf"
+done
+
+fail() { printf '%s\n' "$*" >&2; exit 1; }
+# ready DIR PIN: DIR was published by this script for exactly PIN.
+ready() { [[ -f "$1/${jb_stamp}" && "$(cat "$1/${jb_stamp}")" == "$2" ]]; }
+# missing NAME DIR: in --check mode stop with the repair command.
+missing() {
+  ((jb_check)) || return 0
+  fail "Pinned $1 is not ready at $2. Run ${jb_root}/scripts/ensure_tools.sh $1"
+}
+# staging DIR: fresh sibling directory that publish moves into place.
+staging() { rm -rf "$1.staging"; mkdir -p "$1.staging"; printf '%s\n' "$1.staging"; }
+# publish STAGING DIR PIN: replace DIR with the verified staging tree.
+publish() { printf '%s\n' "$3" > "$1/${jb_stamp}"; rm -rf "$2"; mv "$1" "$2"; }
+# checkout REPO REF DIR: shallow fetch of exactly REF.
+checkout() {
+  git init -q "$3"
+  git -C "$3" fetch -q --depth 1 "$1" "$2"
+  git -C "$3" checkout -q --detach FETCH_HEAD
+  [[ "$(git -C "$3" rev-parse HEAD)" == "$2" ]] || fail "Fetched $1 is not $2"
+}
+# download URL SHA256: path of the cached, verified archive on stdout.
+download() {
+  local file
+  file="${jb_tools}/downloads/$(basename "$1")"
+  mkdir -p "${jb_tools}/downloads"
+  if ! printf '%s  %s\n' "$2" "$file" | sha256sum --check --status 2>/dev/null; then
+    curl -fsSL --retry 3 -o "$file.part" "$1"
+    mv "$file.part" "$file"
+    printf '%s  %s\n' "$2" "$file" | sha256sum --check --status ||
+      { rm -f "$file"; fail "SHA-256 mismatch for $1"; }
+  fi
+  printf '%s\n' "$file"
+}
+
+ensure_unity() {
+  local dir="${jb_tools}/Unity" pin="unity|${UNITY_REF}" work
+  if ready "$dir" "$pin" && [[ "$(git -C "$dir" rev-parse HEAD)" == "$UNITY_REF" ]]; then
+    return
+  fi
+  missing unity "$dir"
+  work="$(staging "$dir")"
+  checkout "$UNITY_REPO" "$UNITY_REF" "$work"
+  publish "$work" "$dir" "$pin"
+  printf 'Unity %s ready: %s\n' "$UNITY_VERSION" "$dir"
+}
+
+ensure_cppcheck() {
+  local source="${jb_tools}/cppcheck-source" build="${jb_tools}/cppcheck" work
+  # The build copies cfg/, addons/ and platforms/ next to the binary; FILESDIR
+  # points there too. DISABLE_DMAKE keeps the pinned checkout unmodified.
+  local definitions=(-DCMAKE_BUILD_TYPE=Release "-DFILESDIR=${build}/bin" -DBUILD_GUI=OFF
+    -DBUILD_TESTS=OFF -DDISABLE_DMAKE=ON)
+  local pin="cppcheck|${CPPCHECK_REF}|${definitions[*]}" source_pin="cppcheck-source|${CPPCHECK_REF}"
+  if ready "$build" "$pin" && [[ -f "${build}/bin/cfg/std.cfg" ]] &&
+      [[ "$("${build}/bin/cppcheck" --version 2>/dev/null)" == "Cppcheck ${CPPCHECK_VERSION}" ]]; then
+    return
+  fi
+  missing cppcheck "$build"
+  if ! ready "$source" "$source_pin"; then
+    work="$(staging "$source")"
+    checkout "$CPPCHECK_REPO" "$CPPCHECK_REF" "$work"
+    publish "$work" "$source" "$source_pin"
+  fi
+  work="$(staging "$build")"
+  cmake -S "$source" -B "$work" "${definitions[@]}"
+  cmake --build "$work" -j "$jb_jobs"
+  [[ "$("${work}/bin/cppcheck" --version)" == "Cppcheck ${CPPCHECK_VERSION}" &&
+    -f "${work}/bin/cfg/std.cfg" ]] || fail "The built cppcheck is not ${CPPCHECK_VERSION}"
+  publish "$work" "$build" "$pin"
+  printf 'cppcheck %s ready: %s/bin/cppcheck\n' "$CPPCHECK_VERSION" "$build"
+}
+
+ensure_pmd() {
+  local dir="${jb_tools}/pmd" pin="pmd|${PMD_VERSION}|${PMD_SHA256}" archive work
+  local binary="${dir}/pmd-bin-${PMD_VERSION}/bin/pmd"
+  if ready "$dir" "$pin" && [[ -x "$binary" ]]; then
+    return
+  fi
+  missing pmd "$dir"
+  archive="$(download "$PMD_URL" "$PMD_SHA256")"
+  work="$(staging "$dir")"
+  unzip -q "$archive" -d "$work"
+  "${work}/pmd-bin-${PMD_VERSION}/bin/pmd" --version | grep -q "PMD ${PMD_VERSION}" ||
+    fail "The extracted PMD is not ${PMD_VERSION}"
+  publish "$work" "$dir" "$pin"
+  printf 'PMD %s ready: %s\n' "$PMD_VERSION" "$binary"
+}
+
+ensure_riscv() {
+  local dir="${jb_tools}/riscv-toolchain" token sha archive work
+  case "$(uname -m)" in
+    x86_64) token=x86_64-lin; sha="$RISCV_TOOLCHAIN_SHA256_X86_64_LIN" ;;
+    aarch64 | arm64) token=aarch64-lin; sha="$RISCV_TOOLCHAIN_SHA256_AARCH64_LIN" ;;
+    *) fail "No pinned RISC-V toolchain for $(uname -m)" ;;
+  esac
+  local asset="${RISCV_TOOLCHAIN_ASSET_STEM}-${token}.tar.gz"
+  local pin="riscv-toolchain|${RISCV_TOOLCHAIN_TAG}|${asset}|${sha}"
+  local gcc="${dir}/bin/${RISCV_TOOLCHAIN_TRIPLE}-gcc"
+  if ready "$dir" "$pin" && [[ -x "$gcc" ]]; then
+    return
+  fi
+  missing riscv-toolchain "$dir"
+  archive="$(download "${RISCV_TOOLCHAIN_RELEASE_BASE}/${RISCV_TOOLCHAIN_TAG}/${asset}" "$sha")"
+  work="$(staging "$dir")"
+  tar -xzf "$archive" -C "$work"
+  # A lone top-level directory inside the archive is the toolchain root.
+  local entries=("$work"/*)
+  if ((${#entries[@]} == 1)) && [[ -d "${entries[0]}" ]]; then
+    mv "${entries[0]}" "$work.inner"
+    rm -rf "$work"
+    mv "$work.inner" "$work"
+  fi
+  "${work}/bin/${RISCV_TOOLCHAIN_TRIPLE}-gcc" --version | head -1 |
+    grep -q " ${RISCV_TOOLCHAIN_GCC_MAJOR}\." ||
+    fail "The extracted toolchain is not GCC ${RISCV_TOOLCHAIN_GCC_MAJOR}"
+  publish "$work" "$dir" "$pin"
+  printf 'RISC-V toolchain %s ready: %s\n' "$RISCV_TOOLCHAIN_TAG" "$gcc"
+}
+
+for jb_name in "${jb_selected[@]}"; do
+  case "$jb_name" in
+    unity) ensure_unity ;;
+    cppcheck) ensure_cppcheck ;;
+    pmd) ensure_pmd ;;
+    riscv-toolchain) ensure_riscv ;;
+    *) fail "Unknown tool: ${jb_name}" ;;
+  esac
+done
+printf 'Pinned tools ready below %s\n' "$jb_tools"

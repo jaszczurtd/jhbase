@@ -2,6 +2,7 @@
 #include "jb/utf8.h"
 #include <hal/core/hal_array.h>
 #include <stdlib.h>
+#include <string.h>
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size);
 
@@ -42,10 +43,20 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         abort();
       }
       if (token->type == JB_JSON_STRING) {
-        size_t required;
-        if (jb_json_string_copy((jb_json_node_t){&doc, i}, output, sizeof(output), &required) !=
-                HAL_OK ||
-            jb_utf8_validate(output, required, NULL) != HAL_OK) {
+        const jb_json_node_t node = {&doc, i};
+        size_t required, terminated;
+        bool same = false;
+        if (jb_json_string_copy(node, output, sizeof(output), &required) != HAL_OK ||
+            jb_utf8_validate(output, required, NULL) != HAL_OK ||
+            jb_json_string_equal(node, (jb_json_span_t){output, required}, &same) != HAL_OK ||
+            !same) {
+          abort();
+        }
+        /* A decoded NUL has no C string; otherwise cstr adds exactly the terminator. */
+        const bool has_nul = memchr(output, 0, required) != NULL;
+        const hal_status_t cstr = jb_json_string_cstr(node, output, sizeof(output), &terminated);
+        if (has_nul ? cstr != HAL_ETYPE
+                    : (cstr != HAL_OK || terminated != required + 1 || output[required] != '\0')) {
           abort();
         }
       }

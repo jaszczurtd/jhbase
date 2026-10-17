@@ -6,7 +6,7 @@
  * scratch must not overlap. Input and tokens stay unchanged while any document
  * or node is used; parser scratch may be reused immediately after parsing.
  * No heap, variable-length arrays, input-dependent recursion or global state.
- * Wrong-kind reads temporarily return HAL_EINVAL; HAL_ETYPE is not introduced.
+ * Wrong-kind reads return HAL_ETYPE; bad arguments return HAL_EINVAL.
  */
 #include "jb/status.h"
 
@@ -134,31 +134,31 @@ hal_status_t jb_json_locate(jb_json_span_t input, size_t offset, size_t *out_lin
 hal_status_t jb_json_root(const jb_json_doc_t *doc, jb_json_node_t *out);
 /** Get kind. Required out; an invalid node gives HAL_ESTATE. */
 hal_status_t jb_json_type(jb_json_node_t node, jb_json_type_t *out);
-/** Count direct members/items. Required out; wrong kind gives HAL_EINVAL. */
+/** Count direct members/items. Required out; wrong kind gives HAL_ETYPE. */
 hal_status_t jb_json_count(jb_json_node_t node, size_t *out);
 /** First member/item, or HAL_ENOENT when empty. Required out. */
 hal_status_t jb_json_first(jb_json_node_t container, jb_json_node_t *out);
 /** Next sibling, or HAL_ENOENT at end. Required out. */
 hal_status_t jb_json_next(jb_json_node_t node, jb_json_node_t *out);
 /** Find decoded, case-sensitive UTF-8 key, including NUL, without NFC.
- * Required out; invalid key UTF-8 gives HAL_EPROTO, wrong kind HAL_EINVAL,
+ * Required out; invalid key UTF-8 gives HAL_EPROTO, wrong kind HAL_ETYPE,
  * absent key HAL_ENOENT. Linear scan; this is not a work-limited operation.
  */
 hal_status_t jb_json_find(jb_json_node_t object, jb_json_span_t key, jb_json_node_t *out);
 /** Find zero-based array position in linear time. Required out.
- * Wrong kind gives HAL_EINVAL; missing position gives HAL_ENOENT.
+ * Wrong kind gives HAL_ETYPE; missing position gives HAL_ENOENT.
  */
 hal_status_t jb_json_at(jb_json_node_t array, size_t position, jb_json_node_t *out);
 /** Borrow original value bytes including delimiters. Required out. */
 hal_status_t jb_json_raw(jb_json_node_t node, jb_json_span_t *out);
-/** Borrow original number token without numeric conversion. Required out. */
+/** Borrow original number token. Required out; wrong kind gives HAL_ETYPE. */
 hal_status_t jb_json_number_token(jb_json_node_t node, jb_json_span_t *out);
-/** Read boolean without coercion. Required out; wrong kind HAL_EINVAL. */
+/** Read boolean without coercion. Required out; wrong kind HAL_ETYPE. */
 hal_status_t jb_json_get_bool(jb_json_node_t node, bool *out);
 
 /** Decode string bytes without a terminator. Required required.
  * (NULL,0) measures. On HAL_EOVERFLOW, reports full required bytes and leaves
- * buffer untouched. Wrong kind/pointers give HAL_EINVAL. No allocation.
+ * buffer untouched. Wrong kind gives HAL_ETYPE, bad pointers HAL_EINVAL.
  */
 hal_status_t jb_json_string_copy(jb_json_node_t node, char *buffer, size_t capacity,
                                  size_t *required);
@@ -167,6 +167,17 @@ hal_status_t jb_json_string_copy(jb_json_node_t node, char *buffer, size_t capac
  */
 hal_status_t jb_json_key_copy(jb_json_node_t member, char *buffer, size_t capacity,
                               size_t *required);
+/** Compare the decoded string with plain UTF-8 bytes, without NFC or case folding.
+ * Required out; value may contain NUL. Wrong kind gives HAL_ETYPE, invalid
+ * value UTF-8 HAL_EPROTO, a NULL value with nonzero length HAL_EINVAL.
+ */
+hal_status_t jb_json_string_equal(jb_json_node_t node, jb_json_span_t value, bool *out);
+/** Decode as a NUL-terminated C string; required counts the terminator.
+ * Buffer rules follow string_copy. A value containing U+0000 gives HAL_ETYPE
+ * instead of a silently shortened string; both outputs stay unchanged.
+ */
+hal_status_t jb_json_string_cstr(jb_json_node_t node, char *buffer, size_t capacity,
+                                 size_t *required);
 
 #ifdef __cplusplus
 }

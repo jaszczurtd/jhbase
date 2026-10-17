@@ -151,10 +151,11 @@ hal_status_t jb_json_strings_equal(jb_json_span_t left, jb_json_span_t right, bo
 }
 
 hal_status_t jb_json_copy_string(jb_json_span_t raw, char *buffer, size_t capacity,
-                                 size_t *required) {
+                                 size_t *required, bool terminate) {
   if (required == NULL || (buffer == NULL && capacity != 0)) {
     return HAL_EINVAL;
   }
+  const size_t terminator = terminate ? 1u : 0u;
   size_t length = 0, position = 0;
   while (position < raw.length) {
     uint32_t scalar;
@@ -163,17 +164,20 @@ hal_status_t jb_json_copy_string(jb_json_span_t raw, char *buffer, size_t capaci
     if (status != HAL_OK) {
       return status;
     }
+    if (terminate && scalar == 0) {
+      return HAL_ETYPE; /* A C string cannot carry U+0000 without truncation. */
+    }
     (void)jb_utf8_encode(scalar, NULL, 0, &width);
-    if (width > SIZE_MAX - length) {
+    if (width > SIZE_MAX - terminator - length) {
       return HAL_EOVERFLOW;
     }
     length += width;
   }
-  *required = length;
+  *required = length + terminator;
   if (buffer == NULL) {
     return HAL_OK;
   }
-  if (length > capacity) {
+  if (*required > capacity) {
     return HAL_EOVERFLOW;
   }
   position = 0;
@@ -190,6 +194,9 @@ hal_status_t jb_json_copy_string(jb_json_span_t raw, char *buffer, size_t capaci
       return status;
     }
     written += width;
+  }
+  if (terminate) {
+    buffer[length] = '\0';
   }
   return HAL_OK;
 }

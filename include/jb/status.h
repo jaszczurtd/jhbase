@@ -3,7 +3,7 @@
 
 /** @file status.h
  * Shared operation results, borrowed from HAL until the first integration pin.
- * The prototype adds no result codes and links no HAL runtime.
+ * HAL_ETYPE is supplied by that same header. No HAL runtime is linked.
  */
 #include "jb/abi.h"
 #include <hal/core/hal_status.h>

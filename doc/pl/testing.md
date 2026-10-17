@@ -1,4 +1,4 @@
-# Podstawowy odbiór prototypu
+# Testowanie biblioteki
 
 `./runalltests.sh` uruchamia poniższe etapy na Linuksie. Błąd polecenia
 zatrzymuje zestaw. `--stage NAME` uruchamia ten sam etap osobno. Buildy
@@ -7,20 +7,24 @@ wyłącznie własną kopię źródeł.
 
 | Etap | Kontrole |
 | --- | --- |
-| `host` | GCC Release/LTO, testy Unity UTF-8/JSON, użycie API z C++17 i odrzucanie błędnego ABI. |
+| `host` | GCC Release/LTO, testy UTF-8/JSON/liczb/writera/literałów, C++17, niezależna kontrola najkrótszego zapisu, kompilowane literały i przykłady C/C++, odrzucanie błędnego ABI. |
 | `sanitizers` | Clang ASan, UBSan i LeakSanitizer obejmujące bibliotekę i programy testowe. |
-| `memcheck` | Valgrind na właściwych executable testów UTF-8, JSON i C++. |
-| `fuzz` | Ograniczony przebieg libFuzzer z ustalonym seedem: parser, pomiar, odczyt i UTF-8. |
-| `freestanding` | Kompilacja kodu przenośnego dla Cortex-M0+, M33 i M4; raport stosu i odrzucanie symboli heap. |
+| `memcheck` | Valgrind na właściwych executable testów, probe literałów i przykładów. |
+| `fuzz` | Osobne przebiegi libFuzzer z ustalonym seedem dla parsera/UTF-8, dokładnych liczb/literałów i operacji writera; każdy ma ograniczoną liczbę prób. |
+| `freestanding` | Kompilacja/linkowanie probe analitycznego dla Cortex-M0+, M33, M4 i RP2350 RISC-V; rozmiary, raport stosu i odrzucanie symboli heap we własnych obiektach i kompletnym probe. |
+| `comparison` | Przypięte porównanie coreJSON/yyjson z instrumentacją źródeł upstream i właściwego parsera. |
 | `clean` | Pierwszy configure/build/test w kopii źródeł ze spacjami, bez stanu buildu; potem build przyrostowy. |
-| `analysis` | Przypięty build cppcheck z HAL sprawdza przenośne moduły C. |
-| `quality` | Składnia Bash, clang-format i kontrola whitespace Gita. |
+| `analysis` | Build cppcheck przypięty w `third_party/cppcheck_version.conf` sprawdza przenośne moduły C. |
+| `quality` | Składnia Bash, clang-format, whitespace źródeł i PMD CPD dla własnego kodu produkcyjnego, testów i przykładów. |
 
-Potrzebne są CMake, Ninja, GCC/G++, Clang/Clang++ 18 z libFuzzer,
-Valgrind, arm-none-eabi GCC/binutils, przypięty build cppcheck z HAL,
-clang-format, ripgrep, tar i Git.
-Żadne narzędzie nie instaluje się automatycznie. Testy czytają tylko przypięte
-nagłówki statusów/tablic HAL i pliki Unity; nie czytają firmware'u testów
+Potrzebne narzędzia systemowe to CMake, Ninja, GCC/G++, Clang/Clang++ 18
+z libFuzzer, Valgrind, arm-none-eabi GCC/binutils, Java, clang-format, ripgrep,
+curl, unzip, tar i Git. Unity, cppcheck, PMD i toolchain RISC-V są przypięte
+w `third_party/*_version.conf`; `./scripts/ensure_tools.sh` instaluje je
+w `.build/tools`, sprawdzając rewizje i sumy SHA-256. Bramka tylko sprawdza
+ich obecność; `--tools-root` albo `JHBASE_TOOLS_ROOT` wskazuje inne miejsce.
+Testy czytają sprawdzone nagłówki statusów/tablic HAL i istniejące oczekiwania
+liczbowe z `tests/fixtures/device_tree/cases.json`. Nie czytają firmware'u testów
 sprzętowych. LeakSanitizer wymaga środowiska bez ograniczeń ptrace.
 CTest zapisuje JUnit XML w każdym katalogu buildu hostowego.
 
@@ -30,17 +34,53 @@ zagnieżdżenia i ponowne użycie scratch. Nie zależą od Pythona ani SDK.
 Fuzzing sprawdza też zakresy tokenów, relacje rodziców/rodzeństwa i zdekodowane
 UTF-8. Ograniczony przebieg jest smoke testem, nie dowodem pełnego pokrycia.
 
-Natywne MSVC wymaga wskazania windowsowych kopii tych samych zależności:
+Przygotuj raz źródła porównania, a potem uruchom pełną bramkę Linuksa:
 
-```powershell
-cmake -S . -B .build/msvc -G "Visual Studio 17 2022" -A x64 -DJHBASE_HAL_ROOT=C:/src/JaszczurHAL
-cmake --build .build/msvc --config Release
-ctest --test-dir .build/msvc -C Release --output-on-failure
+```sh
+./scripts/ensure_tools.sh
+./scripts/prepare_comparison.sh
+./runalltests.sh -j4
+./runalltests.sh --list-stages
+./runalltests.sh --stage host -j4
 ```
 
-Polecenia uruchamiają te same przypadki CTest, także kontrolę naturalnego
-układu i pakowania. Próba z flagą krótkich enumów dotyczy GCC/Clang.
-Kompilacja ARM nie potwierdza działania na urządzeniu, a przebieg Linuksa
-nie potwierdza MSVC ani Win32. Pełny etap 1a nadal wymaga natywnego MSVC,
-szerszego porównania parserów, konwersji liczb, writera i pomiarów targetów.
-Prototyp nie zmienia jobów CI ani produkcyjnych workflowów HAL.
+Oba skrypty przygotowania pobierają wyłącznie przypiętą, zweryfikowaną
+zawartość do `.build`. Sama bramka niczego nie pobiera, a gdy brakuje
+któregoś narzędzia w wymaganej wersji, kończy się poleceniem naprawy.
+Zobacz [wybór parsera](parser-choice.md).
+Etap `comparison` pozwala wskazać cache przez `JHBASE_COMPARISON_ROOT`.
+
+`--commit [REF]` uruchamia runner wskazanego commita z czystego worktree na
+odłączonym HEAD, a następnie usuwa to worktree. Domyślnie sprawdza HEAD
+z jawnie wybranymi zależnościami HAL. Ich hashe muszą pasować do danej rewizji.
+Lokalne niezacommitowane zmiany są pomijane, także zmiany samego runnera:
+
+```sh
+./runalltests.sh --commit HEAD --hal-root /path/to/matching/HAL -j4
+```
+
+Każdy fuzzer używa obecnie `-runs=100000 -seed=8259 -max_len=4096 -timeout=3`.
+Corpora i artefakty awarii mają osobne katalogi dla każdego executable.
+Sanitizery i kontrola wycieków pozostają włączone. CPD odrzuca bloki duplikacji
+od 100 tokenów w obu własnych zakresach; kod porównawczy upstream jest poza
+tymi zakresami. Kod testów urządzeń pozostaje poza domyślnymi kontrolami.
+
+Probe literałów korzysta z niezależnych oczekiwanych bitów istniejącej fixture
+HAL, a następnie kompiluje i uruchamia rzeczywiste wygenerowane literały jako
+C11 i C++17. Odczyt liczb sprawdzają też ustalone wektory IEEE i bezpośrednie
+odczyty natywne; najkrótszy zapis jest porównywany z C++17 `to_chars`/`from_chars`.
+Kompletne przykłady są wyodrębniane z każdej wersji Markdown API i sprawdzane
+jako C11 oraz C++17. Zmiana kodu uruchamia ponowne generowanie; obie wersje
+językowe muszą mieć identyczne przykłady. Samodzielne przykłady liczb i writera
+również działają w obu językach programowania.
+
+Dla natywnego MSVC x64 i Win32 użyj [checklisty Windows](windows.md)
+i `runalltests.ps1`. Runner uruchamia te same zestawy CTest, także sprawdzenie
+układu i pakowania. Próby z flagą krótkich enumów dotyczą tylko GCC/Clang: odrzucają krótki
+enum statusów bez selektora i akceptują jawny selektor stałej szerokości.
+Test przechwytujący alokacje przez linker GNU jest właściwy dla Linuksa.
+
+Cross kompilacja i statyczne raporty `.su` nie potwierdzają czasu na urządzeniu,
+maksymalnego stosu runtime ani rozmiaru zlinkowanego firmware. Pomiary sprzętowe
+wymagają osobnego jawnego przebiegu. Wynik Linuksa nie potwierdza odbioru
+MSVC/Win32. Prototyp nie dodaje jobów CI ani produkcyjnych workflowów generatorów.

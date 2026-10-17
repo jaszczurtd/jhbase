@@ -1,5 +1,5 @@
 file(MAKE_DIRECTORY "${JB_WORK}")
-set(includes "#include \"jb/json.h\"\n#include \"jb/utf8.h\"\n")
+set(includes "#include \"jb/json.h\"\n#include \"jb/utf8.h\"\n#include \"jb/json_number.h\"\n#include \"jb/json_writer.h\"\n#include \"jb/literal.h\"\n")
 
 function(probe name source should_pass language)
   if(language STREQUAL "CXX")
@@ -46,7 +46,12 @@ foreach(language C CXX)
   probe("pack_between_${language}"
         "#include \"jb/status.h\"\n#pragma pack(push, 1)\n${includes}#pragma pack(pop)\n"
         FALSE "${language}")
+  probe("pack_after_json_${language}"
+        "#include \"jb/json.h\"\n#pragma pack(push, 1)\n#include \"jb/json_number.h\"\n#include \"jb/json_writer.h\"\n#pragma pack(pop)\n"
+        FALSE "${language}")
   if(NOT JB_MSVC)
+    probe("fixed_status_${language}" "#define HAL_STATUS_FIXED_32\n${includes}"
+          TRUE "${language}" -fshort-enums)
     probe("short_enum_${language}" "${includes}" FALSE "${language}" -fshort-enums)
     probe("packed_flag_${language}" "${includes}" FALSE "${language}" -fpack-struct=1)
   endif()
