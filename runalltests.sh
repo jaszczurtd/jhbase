@@ -222,7 +222,10 @@ analysis() {
 
 quality() {
   bash -n "${JB_ROOT}/runalltests.sh"
-  for jb_script in "${JB_ROOT}"/scripts/*.sh; do bash -n "$jb_script"; done
+  for jb_script in "${JB_ROOT}"/scripts/*.sh "${JB_ROOT}"/tests/*.sh; do bash -n "$jb_script"; done
+  for jb_hook in "${JB_ROOT}"/.githooks/*; do sh -n "$jb_hook"; done
+  # The JaszczurHAL commit rules, exercised in a scratch repository.
+  "${JB_ROOT}/tests/check_hooks.sh"
   clang-format --dry-run --Werror "${JB_ROOT}"/include/jb/*.h \
     "${JB_ROOT}"/src/*.[ch] "${JB_ROOT}"/tests/*.c "${JB_ROOT}"/tests/*.h \
     "${JB_ROOT}"/tests/*.cpp "${JB_ROOT}"/examples/*.c

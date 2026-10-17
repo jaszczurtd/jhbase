@@ -161,4 +161,11 @@ for jb_name in "${jb_selected[@]}"; do
     *) fail "Unknown tool: ${jb_name}" ;;
   esac
 done
+# The JaszczurHAL commit rules: route Git to the tracked hooks, as runmefirst.sh
+# does there. A source copy without .git and the --check mode leave Git alone.
+if ((!jb_check)) && git -C "$jb_root" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  chmod +x "$jb_root/.githooks/pre-commit" "$jb_root/.githooks/commit-msg"
+  git -C "$jb_root" config core.hooksPath .githooks
+  printf 'Git hooks configured: %s\n' "$(git -C "$jb_root" config --get core.hooksPath)"
+fi
 printf 'Pinned tools ready below %s\n' "$jb_tools"

@@ -1,3 +1,6 @@
+# The vendored Ryu subset must match its SHA-256 manifest byte for byte. Used by
+# configure through dependencies.cmake and by the pre-commit hook on its own.
+include("${CMAKE_CURRENT_LIST_DIR}/require_hash.cmake")
 set(jb_ryu_root "${CMAKE_CURRENT_LIST_DIR}/../third_party/ryu")
 file(STRINGS "${jb_ryu_root}/SHA256SUMS" jb_ryu_hashes)
 list(LENGTH jb_ryu_hashes jb_ryu_file_count)

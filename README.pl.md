@@ -33,6 +33,14 @@ a następnie pełny lokalny zestaw kontroli przez `./runalltests.sh`.
 `--list-stages` pokazuje etapy, a `--stage host` wybiera jeden z nich.
 [Opis testów](doc/pl/testing.md) wymienia narzędzia i ograniczenia platform.
 
+Commity podlegają regułom JaszczurHAL: `./scripts/ensure_tools.sh` ustawia
+`core.hooksPath` na śledzony katalog `.githooks` (albo wykonaj raz
+`git config core.hooksPath .githooks`). `commit-msg` wymaga tematu w formacie
+Conventional Commits (`type(scope): subject`, najwyżej 100 znaków);
+`pre-commit` normalizuje stagowany tekst, formatuje C/C++ przez clang-format
+i sprawdza drzewo stagowane (whitespace własnych źródeł, manifest Ryu,
+składnia skryptów).
+
 [Opis API](doc/pl/api.md) wyjaśnia obsługę pamięci, limitów i błędów.
 JSON Pointer, JSON Schema i NFC są poza obecnym zakresem.
 Publiczne ABI prototypu może zmienić się przed pierwszą integracją.

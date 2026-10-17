@@ -1,0 +1,42 @@
+#!/bin/sh
+set -eu
+
+commit_msg_file="$1"
+
+# Normalize problematic UTF-8 punctuation in the commit message itself.
+# Use byte sequences so this works even when Perl does not decode input
+# as UTF-8 by default.
+perl -i -pe 's/\xC2\xA0/ /g; s/\xE2\x80[\x98\x99]/\x27/g; s/\xE2\x80[\x9C\x9D]/\x22/g; s/\xE2\x80[\x93\x94]/-/g; s/\xE2\x86\x92/->/g; s/\xE2\x80\xA6/.../g' "$commit_msg_file"
+
+first_line="$(sed -n '1p' "$commit_msg_file")"
+
+sed -i '/^[[:space:]]*co[[:space:]_-]*authored[[:space:]_-]*by[[:space:]]*:/Id' "$commit_msg_file"
+first_line="$(sed -n '1p' "$commit_msg_file")"
+
+# Conventional Commits subset:
+# type(scope)!: subject
+# type!: subject
+# type: subject
+#
+# type in: feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert
+pattern='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9._/-]+\))?(!)?: [^ ].+$'
+
+if ! printf '%s\n' "$first_line" | grep -Eq "$pattern"; then
+    echo "ERROR: Invalid commit message format."
+    echo "Expected: type(scope): subject"
+    echo "Allowed types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert"
+    echo "Examples:"
+    echo "  feat(ds18b20): add retry for crc mismatch"
+    echo "  fix: handle null pointer in gpio init"
+    exit 1
+fi
+
+# Keep subject line reasonably short.
+subject_len="$(printf '%s' "$first_line" | wc -c | tr -d ' ')"
+if [ "$subject_len" -gt 100 ]; then
+    echo "ERROR: Commit subject is too long ($subject_len > 100)."
+    echo "Please keep first line at 100 chars or less."
+    exit 1
+fi
+
+exit 0

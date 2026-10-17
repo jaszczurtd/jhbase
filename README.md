@@ -33,6 +33,13 @@ once, then the complete local suite with `./runalltests.sh`.
 Use `--list-stages` or `--stage host` to select a stage. The
 [test guide](doc/en/testing.md) lists tools and platform limits.
 
+Commits follow the JaszczurHAL rules: `./scripts/ensure_tools.sh` sets
+`core.hooksPath` to the tracked `.githooks` (or run
+`git config core.hooksPath .githooks` once). `commit-msg` requires a
+Conventional Commits subject (`type(scope): subject`, at most 100 characters);
+`pre-commit` normalizes staged text, runs clang-format on C/C++ and checks the
+staged tree (owned-source whitespace, the Ryu manifest, shell syntax).
+
 See [the API guide](doc/en/api.md) for memory, limits and error handling.
 JSON Pointer, JSON Schema and NFC remain outside this prototype.
 Its public ABI may change before the first integration pin.

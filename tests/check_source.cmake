@@ -2,7 +2,8 @@
 file(GLOB_RECURSE sources "${JB_SOURCE}/include/*.h" "${JB_SOURCE}/src/*.[ch]"
   "${JB_SOURCE}/doc/*.md" "${JB_SOURCE}/cmake/*.cmake" "${JB_SOURCE}/scripts/*.sh")
 file(GLOB test_sources "${JB_SOURCE}/tests/*.[ch]" "${JB_SOURCE}/tests/*.cpp"
-  "${JB_SOURCE}/tests/*.cmake" "${JB_SOURCE}/tests/*.ld")
+  "${JB_SOURCE}/tests/*.cmake" "${JB_SOURCE}/tests/*.ld" "${JB_SOURCE}/tests/*.sh"
+  "${JB_SOURCE}/.githooks/*" "${JB_SOURCE}/third_party/*.conf")
 list(APPEND sources ${test_sources})
 file(GLOB_RECURSE examples "${JB_SOURCE}/examples/*.c")
 list(APPEND sources ${examples})

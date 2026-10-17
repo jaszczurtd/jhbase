@@ -14,7 +14,7 @@ corpora stay below `.build/gate`; the `clean` stage replaces only its own copy.
 | `comparison` | Run the pinned coreJSON/yyjson comparison with instrumented upstream sources and the production parser. |
 | `clean` | First configure/build/test from a source copy with spaces and no build state, then an incremental build. |
 | `analysis` | The cppcheck build pinned by `third_party/cppcheck_version.conf`, checking the portable C modules. |
-| `quality` | Shell syntax, clang-format, source whitespace and PMD CPD over owned production/test/example code. |
+| `quality` | Shell syntax, clang-format, source whitespace, PMD CPD over owned production/test/example code, and the git hooks exercised in a scratch repository (`tests/check_hooks.sh`). |
 
 Required system tools are CMake, Ninja, GCC/G++, Clang/Clang++ 18 with
 libFuzzer, Valgrind, arm-none-eabi GCC/binutils, Java, clang-format, ripgrep,

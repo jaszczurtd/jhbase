@@ -1,0 +1,120 @@
+#!/bin/sh
+# The JaszczurHAL commit rules (.githooks/pre-commit there): staged text files
+# are normalized, C/C++ sources are clang-formatted, and the staged tree must
+# pass the repository's static checks before the commit is recorded. The only
+# repository-specific parts are the byte-exact vendored Ryu sources, which are
+# left alone like HAL's generated artifacts, and the final staged-tree check.
+set -eu
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+# Git passes GIT_INDEX_FILE relative to the top of the work tree for a plain
+# commit (an absolute temporary index for a commit naming paths); make it
+# absolute for the staged-tree check below, which runs in another directory.
+case "${GIT_INDEX_FILE:-}" in
+    "" | /*) ;;
+    *)
+        GIT_INDEX_FILE="$repo_root/$GIT_INDEX_FILE"
+        export GIT_INDEX_FILE
+        ;;
+esac
+
+staged_files="$(git diff --cached --name-only --diff-filter=ACMR)"
+
+fix_text_file() {
+    file="$1"
+
+    # Skip deleted or non-regular files.
+    [ -f "$file" ] || return 0
+
+    # Skip binary files.
+    if ! grep -Iq . "$file"; then
+        return 0
+    fi
+
+    # 1) Normalize CRLF to LF.
+    perl -i -pe 's/\r$//' "$file"
+
+    # 2) Remove trailing horizontal whitespace.
+    sed -i 's/[[:blank:]]\+$//' "$file"
+
+    # 3) Ensure trailing newline at EOF.
+    if [ -s "$file" ] && [ "$(tail -c 1 "$file" | wc -l)" -eq 0 ]; then
+        printf '\n' >> "$file"
+    fi
+
+    # 4) Replace problematic UTF-8 punctuation with ASCII equivalents.
+    # Use byte sequences so this works even when Perl does not decode input
+    # as UTF-8 by default.
+    # NBSP -> space
+    # Left/Right single quote -> '
+    # Left/Right double quote -> "
+    # En dash/Em dash -> -
+    # Right arrow -> ->
+    # Ellipsis -> ...
+    perl -i -pe 's/\xC2\xA0/ /g; s/\xE2\x80[\x98\x99]/\x27/g; s/\xE2\x80[\x9C\x9D]/\x22/g; s/\xE2\x80[\x93\x94]/-/g; s/\xE2\x86\x92/->/g; s/\xE2\x80\xA6/.../g' "$file"
+}
+
+format_cpp_file() {
+    file="$1"
+    [ -f "$file" ] || return 0
+
+    case "$file" in
+        *.c|*.cc|*.cpp|*.cxx|*.h|*.hh|*.hpp|*.hxx)
+            if command -v clang-format >/dev/null 2>&1; then
+                clang-format -i "$file"
+            fi
+            ;;
+        *)
+            ;;
+    esac
+}
+
+if [ -n "$staged_files" ]; then
+    echo "[pre-commit] Normalizing staged files..."
+    echo "$staged_files" | while IFS= read -r file; do
+        [ -n "$file" ] || continue
+        case "$file" in
+            third_party/ryu/*)
+                # Vendored upstream sources stay byte-for-byte identical to
+                # their SHA-256 manifest, which the staged-tree check verifies.
+                continue
+                ;;
+        esac
+        fix_text_file "$file"
+        format_cpp_file "$file"
+        git add -- "$file"
+    done
+fi
+
+# After formatting, on the staged tree rather than the working tree, so the
+# check reads exactly the files the commit records: a staged change whose
+# companion file is left unstaged must not pass.
+echo "[pre-commit] Checking the staged tree..."
+staged_tree="$repo_root/.build/pre-commit/staged"
+rm -rf "$staged_tree"
+mkdir -p "$staged_tree"
+git checkout-index --all --prefix="$staged_tree/"
+check_staged_tree() {
+    cd "$staged_tree" &&
+        cmake "-DJB_SOURCE=$staged_tree" -P tests/check_source.cmake &&
+        cmake -P cmake/ryu_verify.cmake &&
+        for script in .githooks/commit-msg .githooks/pre-commit; do
+            sh -n "$script" || return 1
+        done &&
+        for script in runalltests.sh scripts/*.sh tests/*.sh; do
+            bash -n "$script" || return 1
+        done
+}
+if ! (check_staged_tree); then
+    rm -rf "$staged_tree"
+    echo >&2
+    echo "[pre-commit] Commit blocked: the staged tree fails the checks above" >&2
+    echo "[pre-commit] (whitespace and line endings of owned files, the Ryu SHA-256" >&2
+    echo "[pre-commit] manifest, shell syntax). Fix and stage the files, then retry." >&2
+    exit 1
+fi
+rm -rf "$staged_tree"
+
+echo "[pre-commit] Done."

@@ -15,7 +15,7 @@ wyłącznie własną kopię źródeł.
 | `comparison` | Przypięte porównanie coreJSON/yyjson z instrumentacją źródeł upstream i właściwego parsera. |
 | `clean` | Pierwszy configure/build/test w kopii źródeł ze spacjami, bez stanu buildu; potem build przyrostowy. |
 | `analysis` | Build cppcheck przypięty w `third_party/cppcheck_version.conf` sprawdza przenośne moduły C. |
-| `quality` | Składnia Bash, clang-format, whitespace źródeł i PMD CPD dla własnego kodu produkcyjnego, testów i przykładów. |
+| `quality` | Składnia Bash, clang-format, whitespace źródeł, PMD CPD dla własnego kodu produkcyjnego, testów i przykładów oraz hooki Git sprawdzane w tymczasowym repozytorium (`tests/check_hooks.sh`). |
 
 Potrzebne narzędzia systemowe to CMake, Ninja, GCC/G++, Clang/Clang++ 18
 z libFuzzer, Valgrind, arm-none-eabi GCC/binutils, Java, clang-format, ripgrep,
