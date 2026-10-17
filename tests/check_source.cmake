@@ -1,6 +1,7 @@
 # Check owned source text, including files outside Git in a clean source copy.
 file(GLOB_RECURSE sources "${JB_SOURCE}/include/*.h" "${JB_SOURCE}/src/*.[ch]"
-  "${JB_SOURCE}/doc/*.md" "${JB_SOURCE}/cmake/*.cmake" "${JB_SOURCE}/scripts/*.sh")
+  "${JB_SOURCE}/doc/*.md" "${JB_SOURCE}/cmake/*.cmake" "${JB_SOURCE}/scripts/*.sh"
+  "${JB_SOURCE}/scripts/*.cmake" "${JB_SOURCE}/.vscode/*.json")
 file(GLOB test_sources "${JB_SOURCE}/tests/*.[ch]" "${JB_SOURCE}/tests/*.cpp"
   "${JB_SOURCE}/tests/*.cmake" "${JB_SOURCE}/tests/*.ld" "${JB_SOURCE}/tests/*.sh"
   "${JB_SOURCE}/.githooks/*" "${JB_SOURCE}/third_party/*.conf")

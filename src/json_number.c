@@ -152,7 +152,7 @@ static hal_status_t integer(jb_json_node_t node, bool signed_value, uint64_t *ou
   decimal_t d;
   jb_budget_t budget = {SIZE_MAX};
   hal_status_t status = node_decimal(node, &budget, &d);
-  uint64_t value;
+  uint64_t value = 0;
   if (status == HAL_OK) {
     status = magnitude(&d, &value);
   }
@@ -242,7 +242,7 @@ hal_status_t jb_json_number_compare_workspace_size(jb_json_node_t left, jb_json_
   if (out_bytes == NULL) {
     return HAL_EINVAL;
   }
-  jb_json_span_t a, b;
+  jb_json_span_t a = {NULL, 0}, b = {NULL, 0};
   hal_status_t status = jb_json_number_token(left, &a);
   if (status == HAL_OK) {
     status = jb_json_number_token(right, &b);
@@ -313,7 +313,7 @@ hal_status_t jb_json_number_compare(jb_json_node_t left, jb_json_node_t right,
     return HAL_EINVAL;
   }
   jb_budget_t budget = {max_work};
-  decimal_t a, b;
+  decimal_t a = {0}, b = {0};
   hal_status_t status = node_decimal(left, &budget, &a);
   if (status == HAL_OK) {
     status = node_decimal(right, &budget, &b);
@@ -543,7 +543,7 @@ hal_status_t jb_json_get_f32_bits(jb_json_node_t node, const jb_json_float_optio
     return HAL_EINVAL;
   }
   jb_json_span_t token;
-  uint64_t bits;
+  uint64_t bits = 0;
   hal_status_t status = jb_json_number_token(node, &token);
   if (status == HAL_OK) {
     status = jb_number_bits(token, 32, options, work, &bits);

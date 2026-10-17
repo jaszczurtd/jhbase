@@ -235,7 +235,7 @@ static hal_status_t quoted(writer_state_t *s, jb_json_span_t value, bool escaped
     } else {
       uint32_t scalar;
       char bytes[4];
-      size_t width;
+      size_t width = 0; /* Read only after a successful encode; MSVC cannot see that. */
       status = jb_json_scalar(value, &position, &scalar, NULL);
       if (status == HAL_OK) {
         status = jb_utf8_encode(scalar, bytes, sizeof(bytes), &width);

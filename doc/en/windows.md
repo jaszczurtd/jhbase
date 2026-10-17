@@ -18,7 +18,9 @@ and 4 GB RAM; close other programs during installation and builds.
 
 2. Install [CMake](https://cmake.org/download/), version 3.22 or later, and enable
    its command-line PATH option. CTest is included. The Visual Studio generator
-   is used, so Ninja is optional.
+   is used, so Ninja is optional; the `vscode_workspace` suite builds a scratch
+   copy with Ninja when present, otherwise with NMake from the Developer
+   PowerShell (see [VS Code](vscode.md)).
 3. Install [Git for Windows](https://gitforwindows.org/) with command-line access.
 4. Finish pending installer restarts and open a new terminal.
 

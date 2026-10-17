@@ -1,0 +1,284 @@
+{
+    "version": "2.0.0",
+    "inputs": [
+        {
+            "id": "jhbaseProfile",
+            "description": "jhbase build profile",
+            "type": "pickString",
+            "options": [
+                "host - default host compiler",
+                "host-clang - Clang",
+                "host-sanitizers - Clang with AddressSanitizer and UndefinedBehaviorSanitizer"
+            ],
+            "default": "host - default host compiler"
+        },
+        {
+            "id": "jhbaseProfileText",
+            "description": "jhbase build profile id: host, host-clang or host-sanitizers",
+            "type": "promptString",
+            "default": "host"
+        }
+    ],
+    "tasks": [
+        {
+            "label": "Project: Build",
+            "detail": "Ctrl+Shift+1 - build the active profile (Release) and select its compile database",
+            "type": "shell",
+            "command": "${config:jhbase.cmake}",
+            "args": [
+                "-DJB_ACTION=build",
+                "-P",
+                "${workspaceFolder}/scripts/vscode_workspace.cmake"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": [
+                "$gcc",
+                "$msCompile"
+            ]
+        },
+        {
+            "label": "Project: Build (Debug)",
+            "detail": "Build the active profile with CMAKE_BUILD_TYPE=Debug in its own tree",
+            "type": "shell",
+            "command": "${config:jhbase.cmake}",
+            "args": [
+                "-DJB_ACTION=build",
+                "-DJB_CONFIG=Debug",
+                "-P",
+                "${workspaceFolder}/scripts/vscode_workspace.cmake"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": [
+                "$gcc",
+                "$msCompile"
+            ]
+        },
+        {
+            "label": "Project: Test",
+            "detail": "Build the active profile and run its CTest suites",
+            "type": "shell",
+            "command": "${config:jhbase.cmake}",
+            "args": [
+                "-DJB_ACTION=test",
+                "-P",
+                "${workspaceFolder}/scripts/vscode_workspace.cmake"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "test",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": [
+                "$gcc",
+                "$msCompile"
+            ]
+        },
+        {
+            "label": "Project: Refresh IntelliSense",
+            "detail": "Ctrl+Shift+6 - build the active profile and regenerate .vscode/c_cpp_properties.json",
+            "type": "shell",
+            "command": "${config:jhbase.cmake}",
+            "args": [
+                "-DJB_ACTION=refresh-intellisense",
+                "-P",
+                "${workspaceFolder}/scripts/vscode_workspace.cmake"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": [
+                "$gcc",
+                "$msCompile"
+            ]
+        },
+        {
+            "label": "Project: Clean",
+            "detail": "Ctrl+Shift+7 - remove only the active profile's build trees and the generated IntelliSense file",
+            "type": "shell",
+            "command": "${config:jhbase.cmake}",
+            "args": [
+                "-DJB_ACTION=clean",
+                "-P",
+                "${workspaceFolder}/scripts/vscode_workspace.cmake"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Project: Config Dump",
+            "detail": "Ctrl+Shift+9 - print the active profile, generator and build paths",
+            "type": "shell",
+            "command": "${config:jhbase.cmake}",
+            "args": [
+                "-DJB_ACTION=config-dump",
+                "-P",
+                "${workspaceFolder}/scripts/vscode_workspace.cmake"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Project: Select board (GUI)",
+            "detail": "Ctrl+Shift+Alt+1 - select the active build profile from the list",
+            "type": "shell",
+            "command": "${config:jhbase.cmake}",
+            "args": [
+                "-DJB_ACTION=select",
+                "-DJB_PROFILE=${input:jhbaseProfile}",
+                "-P",
+                "${workspaceFolder}/scripts/vscode_workspace.cmake"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Project: Select board",
+            "detail": "Ctrl+Shift+Alt+2 - type the id of the active build profile",
+            "type": "shell",
+            "command": "${config:jhbase.cmake}",
+            "args": [
+                "-DJB_ACTION=select",
+                "-DJB_PROFILE=${input:jhbaseProfileText}",
+                "-P",
+                "${workspaceFolder}/scripts/vscode_workspace.cmake"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Library: Full gate",
+            "detail": "Run every stage of the local gate: runalltests.sh on Linux, runalltests.ps1 on Windows",
+            "type": "shell",
+            "command": "./runalltests.sh",
+            "args": [],
+            "windows": {
+                "command": "powershell",
+                "args": [
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    "${workspaceFolder}/runalltests.ps1"
+                ]
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": [
+                "$gcc",
+                "$msCompile"
+            ]
+        },
+        {
+            "label": "Install git hooks",
+            "detail": "Point core.hooksPath at the tracked .githooks; runs when the folder opens",
+            "type": "shell",
+            "command": "${config:jhbase.cmake}",
+            "args": [
+                "-DJB_ACTION=install-hooks",
+                "-P",
+                "${workspaceFolder}/scripts/vscode_workspace.cmake"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "reveal": "silent",
+                "panel": "shared",
+                "close": true
+            },
+            "runOptions": {
+                "runOn": "folderOpen"
+            },
+            "problemMatcher": []
+        }
+    ]
+}

@@ -1,0 +1,17 @@
+{
+    "jhbase.cmake": "cmake",
+    "C_Cpp.default.configurationProvider": "",
+    "C_Cpp.default.compileCommands": "${workspaceFolder}/.build/vscode/host/Release/compile_commands.json",
+    "C_Cpp.default.cStandard": "c11",
+    "C_Cpp.default.cppStandard": "c++17",
+    "C_Cpp.errorSquiggles": "enabled",
+    "cmake.configureOnOpen": false,
+    "cmake.buildDirectory": "${workspaceFolder}/.build/vscode/cmake-tools",
+    "files.exclude": {
+        "**/.build": true
+    },
+    "search.exclude": {
+        "**/.build": true
+    },
+    "task.allowAutomaticTasks": "on"
+}

@@ -26,7 +26,10 @@ The gate only checks that they are present; `--tools-root` or
 status/array headers and the existing `tests/fixtures/device_tree/cases.json`
 numeric expectations. They do not read device-test firmware.
 LeakSanitizer requires an environment without ptrace restrictions.
-CTest writes JUnit XML in each host build directory.
+CTest writes JUnit XML in each host build directory. The `vscode_workspace`
+suite (label `tooling`) checks the VS Code task documents and runs the
+workspace driver on a scratch copy of the tree; see [VS Code](vscode.md).
+`-DJHBASE_VSCODE_CHECK=OFF` leaves it out of a build.
 
 The tests contain independent byte and grammar vectors, decoded duplicate
 names, exact raw numeric spellings, capacity boundaries, unchanged outputs,

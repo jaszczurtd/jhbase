@@ -24,6 +24,7 @@ option(JHBASE_SANITIZERS "Instrument library and tests with address/undefined sa
 option(JHBASE_FUZZ "Build the Clang libFuzzer entrypoint" OFF)
 option(JHBASE_LTO "Enable interprocedural optimization" OFF)
 option(JHBASE_COMPARE "Build explicit pinned upstream parser comparison" OFF)
+option(JHBASE_VSCODE_CHECK "Register the VS Code workspace check as a CTest test" ON)
 include(CTest)
 
 include(cmake/dependencies.cmake)
@@ -103,7 +104,9 @@ if(BUILD_TESTING)
   jb_check_unity()
   add_library(unity STATIC "${JHBASE_UNITY_ROOT}/src/unity.c")
   target_include_directories(unity PUBLIC "${JHBASE_UNITY_ROOT}/src")
-  target_compile_definitions(unity PUBLIC UNITY_INCLUDE_DOUBLE)
+  # The tests assert 64-bit values; Unity enables them by itself only where long
+  # or pointers are 64 bits wide, which excludes MSVC Win32 and other ILP32 hosts.
+  target_compile_definitions(unity PUBLIC UNITY_INCLUDE_DOUBLE UNITY_SUPPORT_64)
   include(cmake/api_examples.cmake)
   foreach(name utf8 json numbers writer literals)
     add_executable(test_${name} tests/test_${name}.c)
@@ -181,6 +184,17 @@ if(BUILD_TESTING)
     "-DJB_CC=${CMAKE_C_COMPILER}" "-DJB_CXX=${CMAKE_CXX_COMPILER}"
     "-DJB_MSVC=${MSVC}" -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_abi.cmake")
   set_tests_properties(abi PROPERTIES TIMEOUT 60 LABELS "basic")
+  # The VS Code workspace: task documents against the driver and the driver
+  # actions on a scratch copy; nested builds skip this check themselves.
+  if(JHBASE_VSCODE_CHECK AND NOT JHBASE_SANITIZERS AND NOT JHBASE_FUZZ)
+    add_test(NAME vscode_workspace COMMAND "${CMAKE_COMMAND}"
+      "-DJB_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}"
+      "-DJB_SCRATCH=${CMAKE_CURRENT_BINARY_DIR}/vscode-check"
+      "-DJB_TOOLS_ROOT=${JHBASE_TOOLS_ROOT}" "-DJB_UNITY_ROOT=${JHBASE_UNITY_ROOT}"
+      "-DJB_HAL_ROOT=${JHBASE_HAL_ROOT}"
+      -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_vscode_workspace.cmake")
+    set_tests_properties(vscode_workspace PROPERTIES TIMEOUT 900 LABELS "tooling")
+  endif()
   if(JHBASE_LTO)
     set_property(TARGET test_utf8 test_json test_numbers test_writer test_literals test_cxx
                  PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)

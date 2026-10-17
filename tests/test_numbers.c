@@ -1,6 +1,7 @@
 #include "jb/json_number.h"
 #include "test_support.h"
 #include <fenv.h>
+#include <inttypes.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -106,8 +107,8 @@ static void test_comparison_against_bounded_integer_arithmetic(void) {
     const int be = (int)(random % 13u) - 6;
     const bool bn = (random & 1u) != 0;
     char left[48], right[48];
-    (void)snprintf(left, sizeof(left), "%s%ue%d", an ? "-" : "", a, ae);
-    (void)snprintf(right, sizeof(right), "%s%ue%d", bn ? "-" : "", b, be);
+    (void)snprintf(left, sizeof(left), "%s%" PRIu32 "e%d", an ? "-" : "", a, ae);
+    (void)snprintf(right, sizeof(right), "%s%" PRIu32 "e%d", bn ? "-" : "", b, be);
     int64_t av = a, bv = b;
     const int floor = ae < be ? ae : be;
     for (int i = floor; i < ae; ++i) {
@@ -195,8 +196,8 @@ static void test_scratch_budget_and_arguments(void) {
   jb_json_float_options_t options = {true, false, 1000000};
   uint64_t bits = 77;
   TEST_ASSERT_EQUAL(HAL_OK, jb_json_get_f64_bits(node, &options, exact, &bits));
-  TEST_ASSERT_EQUAL_HEX8(0xa5, scratch[0]);
-  TEST_ASSERT_EQUAL_HEX8(0xa5, scratch[needed + 1]);
+  TEST_ASSERT_EQUAL_UINT8(0xa5, scratch[0]);
+  TEST_ASSERT_EQUAL_UINT8(0xa5, scratch[needed + 1]);
   bits = 77;
   TEST_ASSERT_EQUAL(
       HAL_EOVERFLOW,
@@ -242,8 +243,8 @@ static void test_against_native_direct_decimal_reads(void) {
   for (size_t i = 0; i < 2000; ++i) {
     random = random * 1664525u + 1013904223u;
     char token[64];
-    (void)snprintf(token, sizeof(token), "%s%u.%09ue%d", (random & 1) ? "-" : "", random % 1000000u,
-                   random, (int)(random % 700u) - 350);
+    (void)snprintf(token, sizeof(token), "%s%" PRIu32 ".%09" PRIu32 "e%d", (random & 1) ? "-" : "",
+                   random % 1000000u, random, (int)(random % 700u) - 350);
     const jb_json_node_t node = test_parse(token, &documents[0]);
     const double reference = strtod(token, NULL);
     const float small_reference = strtof(token, NULL);

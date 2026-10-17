@@ -35,13 +35,12 @@ static void text(jb_json_node_t node, char *out, size_t capacity) {
 static jb_c_literal_type_t selector(const char *name) {
   static const char *const names[] = {"bool",  "uint8", "uint16", "uint32", "uint64", "int8",
                                       "int16", "int32", "int64",  "float",  "double", "string"};
-  for (size_t i = 0; i < COUNTOF(names); ++i) {
-    if (strcmp(names[i], name) == 0) {
-      return (jb_c_literal_type_t)i;
-    }
+  size_t i = 0;
+  while (i < COUNTOF(names) && strcmp(names[i], name) != 0) {
+    ++i;
   }
-  TEST_FAIL_MESSAGE("Unknown fixture cType");
-  return JB_C_BOOL;
+  TEST_ASSERT_LESS_THAN_MESSAGE(COUNTOF(names), i, "Unknown fixture cType");
+  return (jb_c_literal_type_t)i;
 }
 static jb_json_node_t cases(void) {
   FILE *file = open_fixture(fixture_path, "rb");

@@ -32,6 +32,9 @@ Na Linuksie uruchom raz `./scripts/ensure_tools.sh` i `./scripts/prepare_compari
 a następnie pełny lokalny zestaw kontroli przez `./runalltests.sh`.
 `--list-stages` pokazuje etapy, a `--stage host` wybiera jeden z nich.
 [Opis testów](doc/pl/testing.md) wymienia narzędzia i ograniczenia platform.
+Do pracy w VS Code otwórz katalog główny repozytorium: [opis VS Code](doc/pl/vscode.md)
+wymienia zadania, profile budowania i odświeżanie IntelliSense, sterowane
+jednym skryptem CMake na każdym hoście.
 
 Commity podlegają regułom JaszczurHAL: `./scripts/ensure_tools.sh` ustawia
 `core.hooksPath` na śledzony katalog `.githooks` (albo wykonaj raz

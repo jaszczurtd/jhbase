@@ -3,11 +3,11 @@
 jhbase sprawdza UTF-8, odczytuje wartości skalarne Unicode i udostępnia JSON
 przez niemodyfikowalne węzły. Przenośna implementacja jest w C11 i korzysta
 z pamięci wywołującego. Operacje tekstowe deklaruje
-[utf8.h](../../include/jb/utf8.h), a JSON — [json.h](../../include/jb/json.h).
+[utf8.h](../../include/jb/utf8.h), a JSON - [json.h](../../include/jb/json.h).
 Oba nagłówki można również dołączać z C++17.
 
 Dokładne konwersje i literały C opisuje [moduł liczb](numbers.md),
-a zapis sekwencyjny — [writer](writer.md). JSON Pointer, JSON Schema i NFC
+a zapis sekwencyjny - [writer](writer.md). JSON Pointer, JSON Schema i NFC
 pozostają poza obecnym zakresem. Sposób kompilacji i ograniczenia platform
 opisano w [dokumencie o testach](testing.md).
 
@@ -32,7 +32,7 @@ Przykłady z buforami statycznymi mają jednego właściciela.
 ## UTF-8
 
 Wartość skalarna Unicode (Unicode scalar value) to punkt kodowy od U+0000
-do U+10FFFF, z wyłączeniem surrogatów U+D800–U+DFFF. Funkcje odrzucają kodowania nadmiarowe, błędne
+do U+10FFFF, z wyłączeniem surrogatów U+D800-U+DFFF. Funkcje odrzucają kodowania nadmiarowe, błędne
 continuation bytes i wartości spoza zakresu. Nie normalizują tekstu
 i nie liczą klastrów grafemów.
 
@@ -266,7 +266,8 @@ hal_status_t example_read_enabled(const char *data, size_t length,
         return status;
     }
 
-    jb_json_node_t root, enabled;
+    jb_json_node_t root;
+    jb_json_node_t enabled = {NULL, 0}; /* Set only on success. */
     const jb_json_span_t key = {"enabled", 7};
     status = jb_json_root(&doc, &root);
     if (status == HAL_OK) {
@@ -447,7 +448,8 @@ hal_status_t example_flags_summary(const jb_json_doc_t *doc,
     if (out_total == NULL || out_true == NULL) {
         return HAL_EINVAL;
     }
-    jb_json_node_t root, flags, item;
+    jb_json_node_t root;
+    jb_json_node_t flags = {NULL, 0}, item = {NULL, 0};
     const jb_json_span_t key = {"flags", 5};
     hal_status_t status = jb_json_root(doc, &root);
     if (status == HAL_OK) {
@@ -513,7 +515,8 @@ Dla `{"flags": [true, false]}` pozycja 1 daje `false`, a pozycja 2 `HAL_ENOENT`.
 /** Read one zero-based element of the "flags" array. */
 hal_status_t example_flag_at(const jb_json_doc_t *doc, size_t position,
                             bool *out_value) {
-    jb_json_node_t root, flags, item;
+    jb_json_node_t root;
+    jb_json_node_t flags = {NULL, 0}, item = {NULL, 0};
     const jb_json_span_t key = {"flags", 5};
     hal_status_t status = jb_json_root(doc, &root);
     if (status == HAL_OK) {
@@ -571,7 +574,8 @@ hal_status_t example_number_text(const jb_json_doc_t *doc, char *output,
     if (output == NULL || out_length == NULL) {
         return HAL_EINVAL;
     }
-    jb_json_node_t root, id;
+    jb_json_node_t root;
+    jb_json_node_t id = {NULL, 0};
     const jb_json_span_t key = {"id", 2};
     hal_status_t status = jb_json_root(doc, &root);
     if (status == HAL_OK) {
@@ -652,7 +656,8 @@ większy wynik daje `HAL_EOVERFLOW` przed wypisaniem czegokolwiek.
 
 /** Host-only display of the key, original JSON and decoded label bytes. */
 hal_status_t example_print_label(const jb_json_doc_t *doc) {
-    jb_json_node_t root, label;
+    jb_json_node_t root;
+    jb_json_node_t label = {NULL, 0};
     const jb_json_span_t key = {"label", 5};
     hal_status_t status = jb_json_root(doc, &root);
     if (status == HAL_OK) {
@@ -664,7 +669,7 @@ hal_status_t example_print_label(const jb_json_doc_t *doc) {
 
     jb_json_span_t raw;
     char name[32], value[64];
-    size_t name_bytes, value_bytes;
+    size_t name_bytes = 0, value_bytes = 0;
     status = jb_json_raw(label, &raw);
     if (status == HAL_OK) {
         status = jb_json_key_copy(label, name, sizeof(name), &name_bytes);

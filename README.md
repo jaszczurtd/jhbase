@@ -32,6 +32,9 @@ On Linux, run `./scripts/ensure_tools.sh` and `./scripts/prepare_comparison.sh`
 once, then the complete local suite with `./runalltests.sh`.
 Use `--list-stages` or `--stage host` to select a stage. The
 [test guide](doc/en/testing.md) lists tools and platform limits.
+To work in VS Code, open the repository root: [the VS Code guide](doc/en/vscode.md)
+lists the tasks, build profiles and IntelliSense refresh, driven by one CMake
+script on every host.
 
 Commits follow the JaszczurHAL rules: `./scripts/ensure_tools.sh` sets
 `core.hooksPath` to the tracked `.githooks` (or run

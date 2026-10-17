@@ -8,7 +8,7 @@ void tearDown(void) {}
 static void test_utf8_example(void) {
   char bytes[8];
   memset(bytes, '!', sizeof(bytes));
-  const char input[] = {(char)0xe2, (char)0x82, (char)0xac, 'A'};
+  const char input[] = {'\xe2', '\x82', '\xac', 'A'};
   size_t length = 99, bad = 99;
   TEST_ASSERT_EQUAL(
       HAL_OK, example_first_scalar(input, sizeof(input), bytes, sizeof(bytes), &length, &bad));
@@ -18,7 +18,7 @@ static void test_utf8_example(void) {
   TEST_ASSERT_EQUAL_CHAR('!', bytes[length]);
   TEST_ASSERT_EQUAL(HAL_EOVERFLOW,
                     example_first_scalar(input, sizeof(input), bytes, 2, &length, &bad));
-  const char broken[] = {'A', (char)0xff};
+  const char broken[] = {'A', '\xff'};
   TEST_ASSERT_EQUAL(HAL_EPROTO, example_first_scalar(broken, sizeof(broken), bytes, sizeof(bytes),
                                                      &length, &bad));
   TEST_ASSERT_EQUAL(1, bad);

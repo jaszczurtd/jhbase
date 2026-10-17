@@ -19,7 +19,9 @@ pozostałe programy.
 
 2. Zainstaluj [CMake](https://cmake.org/download/) w wersji co najmniej 3.22
    i zaznacz dodanie narzędzi do PATH. Pakiet zawiera CTest. Używamy generatora
-   Visual Studio, więc Ninja jest opcjonalna.
+   Visual Studio, więc Ninja jest opcjonalna; zestaw `vscode_workspace` buduje
+   tymczasową kopię przez Ninja, gdy jest dostępna, a inaczej przez NMake
+   z Developer PowerShell (zobacz [VS Code](vscode.md)).
 3. Zainstaluj [Git for Windows](https://gitforwindows.org/) z dostępem z terminala.
 4. Wykonaj restarty wymagane przez instalatory i otwórz nowy terminal.
 

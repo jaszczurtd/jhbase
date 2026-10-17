@@ -30,7 +30,7 @@ static void expect(const char *text) {
   TEST_ASSERT_EQUAL(strlen(text), length);
   TEST_ASSERT_EQUAL(length, buffer.used);
   TEST_ASSERT_EQUAL_MEMORY(text, output, length);
-  TEST_ASSERT_EQUAL_HEX8(0xa5, output[length]);
+  TEST_ASSERT_EQUAL_UINT8(0xa5, output[length]);
   TEST_ASSERT_EQUAL(HAL_OK, jb_json_writer_finish(&writer, &length));
 }
 static void test_sequential_values(void) {
@@ -51,7 +51,7 @@ static void test_sequential_values(void) {
 }
 static void test_strings_and_empty_root(void) {
   start();
-  static const char value[] = {'a', 0, '\n', '"', '\\', (char)0xc2, (char)0xb5};
+  static const char value[] = {'a', 0, '\n', '"', '\\', '\xc2', '\xb5'};
   TEST_ASSERT_EQUAL(HAL_OK, jb_json_writer_string(&writer, (jb_json_span_t){value, sizeof(value)}));
   expect("\"a\\u0000\\u000a\\\"\\\\\xc2\xb5\"");
   start();
@@ -111,8 +111,8 @@ static void test_limits_and_sizing(void) {
                                                 jb_json_buffer_sink, &buffer));
   TEST_ASSERT_EQUAL(HAL_OK, jb_json_writer_null(&writer));
   expect("null");
-  TEST_ASSERT_EQUAL_HEX8(0xa5, scratch[0]);
-  TEST_ASSERT_EQUAL_HEX8(0xa5, scratch[needed + 1]);
+  TEST_ASSERT_EQUAL_UINT8(0xa5, scratch[0]);
+  TEST_ASSERT_EQUAL_UINT8(0xa5, scratch[needed + 1]);
   limits.max_depth = SIZE_MAX;
   TEST_ASSERT_EQUAL(HAL_EOVERFLOW, jb_json_writer_workspace_size(&limits, &needed));
   limits.max_depth = 0;

@@ -122,7 +122,7 @@ static void test_capacity_is_transactional_and_measurement_is_exact(void) {
 }
 
 static void test_nul_is_data_and_suffix_is_validated(void) {
-  const char data[] = {'a', '\0', (char)0xc2, (char)0xa0, (char)0xff};
+  const char data[] = {'a', '\0', '\xc2', '\xa0', '\xff'};
   size_t error = 0;
   TEST_ASSERT_EQUAL(HAL_OK, jb_utf8_validate(data, 4, &error));
   TEST_ASSERT_EQUAL(SIZE_MAX, error);

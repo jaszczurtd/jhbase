@@ -223,8 +223,8 @@ static void test_empty_and_nul_keys_and_values(void) {
 
 static void test_all_escapes_and_surrogate_pair(void) {
   TEST_ASSERT_EQUAL(HAL_OK, parse("\"\\\"\\\\\\/\\b\\f\\n\\r\\t\\u0000\\uD834\\uDD1E\""));
-  static const char expected[] = {'"',  '\\', '/',        '\b',       '\f',       '\n',      '\r',
-                                  '\t', '\0', (char)0xf0, (char)0x9d, (char)0x84, (char)0x9e};
+  static const char expected[] = {'"',  '\\', '/',    '\b',   '\f',   '\n',  '\r',
+                                  '\t', '\0', '\xf0', '\x9d', '\x84', '\x9e'};
   char output[32];
   memset(output, '!', sizeof(output));
   size_t needed;
@@ -425,8 +425,8 @@ static void test_workspace_exact_size_canaries_and_overflow(void) {
   TEST_ASSERT_EQUAL(bytes, error.required_capacity);
   TEST_ASSERT_EQUAL(HAL_OK, jb_json_parse(input, &limits, tokens, COUNTOF(tokens),
                                           (jb_json_workspace_t){scratch + 1, bytes}, &doc, NULL));
-  TEST_ASSERT_EQUAL_HEX8(0xa5, scratch[0]);
-  TEST_ASSERT_EQUAL_HEX8(0xa5, scratch[bytes + 1]);
+  TEST_ASSERT_EQUAL_UINT8(0xa5, scratch[0]);
+  TEST_ASSERT_EQUAL_UINT8(0xa5, scratch[bytes + 1]);
   limits.max_depth = SIZE_MAX;
   bytes = 99;
   TEST_ASSERT_EQUAL(HAL_EOVERFLOW, jb_json_parse_workspace_size(&limits, &bytes));

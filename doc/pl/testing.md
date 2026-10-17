@@ -26,7 +26,10 @@ ich obecność; `--tools-root` albo `JHBASE_TOOLS_ROOT` wskazuje inne miejsce.
 Testy czytają sprawdzone nagłówki statusów/tablic HAL i istniejące oczekiwania
 liczbowe z `tests/fixtures/device_tree/cases.json`. Nie czytają firmware'u testów
 sprzętowych. LeakSanitizer wymaga środowiska bez ograniczeń ptrace.
-CTest zapisuje JUnit XML w każdym katalogu buildu hostowego.
+CTest zapisuje JUnit XML w każdym katalogu buildu hostowego. Zestaw
+`vscode_workspace` (etykieta `tooling`) sprawdza dokumenty zadań VS Code
+i uruchamia sterownik workspace na tymczasowej kopii drzewa; zobacz
+[VS Code](vscode.md). `-DJHBASE_VSCODE_CHECK=OFF` pomija go w buildzie.
 
 Testy zawierają niezależne wektory bajtów i składni, zdekodowane duplikaty
 nazw, dokładne tokeny liczb, granice pojemności, niezmienność wyjść, głębokie
