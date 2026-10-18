@@ -12,8 +12,9 @@ cd "$repo_root"
 # Git passes GIT_INDEX_FILE relative to the top of the work tree for a plain
 # commit (an absolute temporary index for a commit naming paths); make it
 # absolute for the staged-tree check below, which runs in another directory.
+# Git for Windows passes absolute paths with a drive letter.
 case "${GIT_INDEX_FILE:-}" in
-    "" | /*) ;;
+    "" | /* | [A-Za-z]:[\\/]*) ;;
     *)
         GIT_INDEX_FILE="$repo_root/$GIT_INDEX_FILE"
         export GIT_INDEX_FILE
