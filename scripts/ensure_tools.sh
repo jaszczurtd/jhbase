@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Fetch, build and verify the gate tools pinned in third_party/*_version.conf:
-# Unity, cppcheck, PMD and the RISC-V toolchain. The pin files carry revisions
+# Unity, cppcheck, PMD and the RISC-V and Xtensa toolchains. The pin files carry revisions
 # and digests only (JaszczurHAL reads the same files from its jhbase checkout);
 # the directory layout below the tools root (default .build/tools) is this
 # script's. Nothing is installed system-wide and the gate itself never
@@ -19,17 +19,17 @@ while (($#)); do
     -j[0-9]*) jb_jobs="${1#-j}"; shift ;;
     --help)
       printf '%s\n' 'Usage: scripts/ensure_tools.sh [--check] [--tools-root PATH] [-j N]' \
-        '       [unity|cppcheck|pmd|riscv-toolchain ...]   (default: all four)'
+        '       [unity|cppcheck|pmd|riscv-toolchain|xtensa-toolchain ...]   (default: all)'
       exit 0 ;;
     -*) printf 'Unknown argument: %s\n' "$1" >&2; exit 2 ;;
     *) jb_selected+=("$1"); shift ;;
   esac
 done
-((${#jb_selected[@]})) || jb_selected=(unity cppcheck pmd riscv-toolchain)
+((${#jb_selected[@]})) || jb_selected=(unity cppcheck pmd riscv-toolchain xtensa-toolchain)
 mkdir -p "$jb_tools"
 jb_tools="$(cd "$jb_tools" && pwd -P)"
 jb_stamp=.jhbase-component
-for jb_conf in unity cppcheck pmd riscv_toolchain; do
+for jb_conf in unity cppcheck pmd riscv_toolchain xtensa_toolchain; do
   # shellcheck source=/dev/null
   source "${jb_root}/third_party/${jb_conf}_version.conf"
 done
@@ -121,23 +121,25 @@ ensure_pmd() {
   printf 'PMD %s ready: %s\n' "$PMD_VERSION" "$binary"
 }
 
-ensure_riscv() {
-  local dir="${jb_tools}/riscv-toolchain" token sha archive work
+# host_arch: suffix of the per-host SHA-256 keys in the toolchain pins.
+host_arch() {
   case "$(uname -m)" in
-    x86_64) token=x86_64-lin; sha="$RISCV_TOOLCHAIN_SHA256_X86_64_LIN" ;;
-    aarch64 | arm64) token=aarch64-lin; sha="$RISCV_TOOLCHAIN_SHA256_AARCH64_LIN" ;;
-    *) fail "No pinned RISC-V toolchain for $(uname -m)" ;;
+    x86_64) printf '%s\n' X86_64 ;;
+    aarch64 | arm64) printf '%s\n' AARCH64 ;;
+    *) fail "No pinned toolchain for $(uname -m)" ;;
   esac
-  local asset="${RISCV_TOOLCHAIN_ASSET_STEM}-${token}.tar.gz"
-  local pin="riscv-toolchain|${RISCV_TOOLCHAIN_TAG}|${asset}|${sha}"
-  local gcc="${dir}/bin/${RISCV_TOOLCHAIN_TRIPLE}-gcc"
-  if ready "$dir" "$pin" && [[ -x "$gcc" ]]; then
+}
+# toolchain NAME DIR URL SHA PIN GCC MAJOR: install a prebuilt GCC archive
+# (tar.gz or tar.xz); GCC is the compiler path relative to the toolchain root.
+toolchain() {
+  local name="$1" dir="$2" url="$3" sha="$4" pin="$5" gcc="$6" major="$7" archive work
+  if ready "$dir" "$pin" && [[ -x "${dir}/${gcc}" ]]; then
     return
   fi
-  missing riscv-toolchain "$dir"
-  archive="$(download "${RISCV_TOOLCHAIN_RELEASE_BASE}/${RISCV_TOOLCHAIN_TAG}/${asset}" "$sha")"
+  missing "$name" "$dir"
+  archive="$(download "$url" "$sha")"
   work="$(staging "$dir")"
-  tar -xzf "$archive" -C "$work"
+  tar -xf "$archive" -C "$work"
   # A lone top-level directory inside the archive is the toolchain root.
   local entries=("$work"/*)
   if ((${#entries[@]} == 1)) && [[ -d "${entries[0]}" ]]; then
@@ -145,11 +147,32 @@ ensure_riscv() {
     rm -rf "$work"
     mv "$work.inner" "$work"
   fi
-  "${work}/bin/${RISCV_TOOLCHAIN_TRIPLE}-gcc" --version | head -1 |
-    grep -q " ${RISCV_TOOLCHAIN_GCC_MAJOR}\." ||
-    fail "The extracted toolchain is not GCC ${RISCV_TOOLCHAIN_GCC_MAJOR}"
+  "${work}/${gcc}" --version | head -1 | grep -q " ${major}\." ||
+    fail "The extracted ${name} is not GCC ${major}"
   publish "$work" "$dir" "$pin"
-  printf 'RISC-V toolchain %s ready: %s\n' "$RISCV_TOOLCHAIN_TAG" "$gcc"
+  printf '%s ready: %s\n' "$name" "${dir}/${gcc}"
+}
+
+ensure_riscv() {
+  local arch sha_key asset
+  arch="$(host_arch)"
+  sha_key="RISCV_TOOLCHAIN_SHA256_${arch}_LIN"
+  asset="${RISCV_TOOLCHAIN_ASSET_STEM}-${arch,,}-lin.tar.gz"
+  toolchain riscv-toolchain "${jb_tools}/riscv-toolchain" \
+    "${RISCV_TOOLCHAIN_RELEASE_BASE}/${RISCV_TOOLCHAIN_TAG}/${asset}" "${!sha_key}" \
+    "riscv-toolchain|${RISCV_TOOLCHAIN_TAG}|${asset}|${!sha_key}" \
+    "bin/${RISCV_TOOLCHAIN_TRIPLE}-gcc" "$RISCV_TOOLCHAIN_GCC_MAJOR"
+}
+
+ensure_xtensa() {
+  local arch sha_key asset
+  arch="$(host_arch)"
+  sha_key="XTENSA_TOOLCHAIN_SHA256_${arch}_LIN"
+  asset="${XTENSA_TOOLCHAIN_ASSET_STEM}-${arch,,}-linux-gnu.tar.xz"
+  toolchain xtensa-toolchain "${jb_tools}/xtensa-toolchain" \
+    "${XTENSA_TOOLCHAIN_RELEASE_BASE}/${XTENSA_TOOLCHAIN_VERSION}/${asset}" "${!sha_key}" \
+    "xtensa-toolchain|${XTENSA_TOOLCHAIN_VERSION}|${asset}|${!sha_key}" \
+    bin/xtensa-esp32s3-elf-gcc "$XTENSA_TOOLCHAIN_GCC_MAJOR"
 }
 
 for jb_name in "${jb_selected[@]}"; do
@@ -158,6 +181,7 @@ for jb_name in "${jb_selected[@]}"; do
     cppcheck) ensure_cppcheck ;;
     pmd) ensure_pmd ;;
     riscv-toolchain) ensure_riscv ;;
+    xtensa-toolchain) ensure_xtensa ;;
     *) fail "Unknown tool: ${jb_name}" ;;
   esac
 done

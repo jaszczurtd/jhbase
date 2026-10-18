@@ -9,7 +9,7 @@ na tokeny i scratch. Parser zachowuje oryginalny zapis liczb.
 To samodzielny prototyp. Korzysta z istniejących nagłówków statusów i tablic
 HAL; nie konfiguruje ani nie linkuje HAL. Ich hashe są w
 [cmake/dependencies.cmake](cmake/dependencies.cmake). Narzędzia testów
-i bramki (Unity, cppcheck, PMD, toolchain RISC-V) mają własne piny
+i bramki (Unity, cppcheck, PMD, toolchainy RISC-V i Xtensa) mają własne piny
 w `third_party/*_version.conf`; `./scripts/ensure_tools.sh` instaluje je
 w `.build/tools`. Buforowy zapis float korzysta z przypiętego podzbioru Ryu;
 zobacz [zależności i licencje](doc/pl/dependencies.md).

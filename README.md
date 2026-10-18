@@ -9,7 +9,7 @@ supply token storage and scratch; the parser preserves original number tokens.
 This is a standalone prototype. It borrows the existing HAL status and array
 headers; it does not configure or link HAL. Their hashes are in
 [cmake/dependencies.cmake](cmake/dependencies.cmake). Test and gate tools
-(Unity, cppcheck, PMD, the RISC-V toolchain) have their own pins in
+(Unity, cppcheck, PMD, the RISC-V and Xtensa toolchains) have their own pins in
 `third_party/*_version.conf`; `./scripts/ensure_tools.sh` installs them below
 `.build/tools`. Buffered float output uses the pinned Ryu subset; see
 [dependencies and licenses](doc/en/dependencies.md).

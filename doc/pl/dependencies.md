@@ -48,7 +48,8 @@ Kontrola freestanding sprawdza odwołania własnych obiektów i kompletny
 zlinkowany probe analityczny, w tym Ryu i libc, pod kątem symboli alokacji.
 Hostowy test przerywa też wykonanie przy malloc/calloc/realloc/free podczas
 wywołań biblioteki. Probe ma mapę pamięci tylko do analizy; nie jest firmware
-do wgrania na urządzenie.
+do wgrania na urządzenie. Pomiary na płytkach korzystają z firmware
+w `tests/device`, opisanego w [testach](testing.md#pomiary-na-urządzeniach).
 
 ## Porównanie i narzędzia jakości
 
@@ -59,10 +60,14 @@ są narzędziami kontroli jakości, bez udziału w runtime. Wymagania narzędzi
 i osobne kontrole Windows opisują [testy](testing.md) oraz
 [przygotowanie Windows](windows.md).
 
-Unity, cppcheck, PMD i toolchain RISC-V są przypięte w plikach
+Unity, cppcheck, PMD oraz toolchainy RISC-V i Xtensa są przypięte w plikach
 `*_version.conf` w [third_party](../../third_party), a
 [ensure_tools.sh](../../scripts/ensure_tools.sh) pobiera je, weryfikuje
-i buduje w `.build/tools`. Te pliki są jedynymi pinami tych narzędzi:
-JaszczurHAL czyta je ze swojego przypiętego checkoutu jhbase zamiast trzymać
-kopie, więc obie bramki używają jednej rewizji każdego narzędzia. Zawierają
-tylko rewizje i skróty; katalogi instalacji wybiera każdy konsument osobno.
+i buduje w `.build/tools`. Dla Unity, cppcheck, PMD i toolchainu RISC-V te
+pliki są jedynymi pinami: JaszczurHAL czyta je ze swojego przypiętego
+checkoutu jhbase zamiast trzymać kopie, więc obie bramki używają jednej
+rewizji każdego narzędzia. Zawierają tylko rewizje i skróty; katalogi
+instalacji wybiera każdy konsument osobno. Toolchain Xtensa służy profilowi
+ESP32-S3. JaszczurHAL dostaje swój kompilator Xtensa razem z ESP-IDF
+i sprawdza, czy ten pin zgadza się z manifestem narzędzi ESP-IDF, bo archiwum
+z pomiarów na urządzeniu linkuje się z firmware ESP-IDF.

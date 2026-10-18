@@ -4,7 +4,8 @@ ENTRY(main)
 PHDRS { code PT_LOAD FLAGS(5); data PT_LOAD FLAGS(6); }
 SECTIONS {
   . = 0x10000000;
-  .text : { *(.text .text.*) } :code
+  /* Xtensa l32r loads only literals placed before the code using them. */
+  .text : { *(.literal .literal.* .text .text.*) } :code
   .rodata : { *(.rodata .rodata.*) } :code
   .ARM.extab : { *(.ARM.extab* .gnu.linkonce.armextab.*) } :code
   .ARM.exidx : {

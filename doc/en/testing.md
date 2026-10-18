@@ -10,7 +10,7 @@ corpora stay below `.build/gate`; the `clean` stage replaces only its own copy.
 | `sanitizers` | Clang ASan, UBSan and LeakSanitizer over library and executables. |
 | `memcheck` | Valgrind over the actual test executables, literal probes and examples. |
 | `fuzz` | Separate seeded libFuzzer runs for parser/UTF-8, exact numbers/literals and writer operations; each has a bounded run count. |
-| `freestanding` | Compile/link an analysis probe for Cortex-M0+, M33, M4 and RP2350 RISC-V; collect sizes/stack usage and reject heap symbols in owned objects and the complete linked probe. |
+| `freestanding` | Compile, archive and link an analysis probe for the profiles in `scripts/freestanding.sh`: Cortex-M0+, M33, M4 with the STM32G474 hard-float ABI, RP2350 RISC-V and ESP32-S3 (Xtensa); collect sizes/stack usage and reject heap symbols in owned objects and the complete linked probe. |
 | `comparison` | Run the pinned coreJSON/yyjson comparison with instrumented upstream sources and the production parser. |
 | `clean` | First configure/build/test from a source copy with spaces and no build state, then an incremental build. |
 | `analysis` | The cppcheck build pinned by `third_party/cppcheck_version.conf`, checking the portable C modules. |
@@ -18,8 +18,8 @@ corpora stay below `.build/gate`; the `clean` stage replaces only its own copy.
 
 Required system tools are CMake, Ninja, GCC/G++, Clang/Clang++ 18 with
 libFuzzer, Valgrind, arm-none-eabi GCC/binutils, Java, clang-format, ripgrep,
-curl, unzip, tar and Git. Unity, cppcheck, PMD and the RISC-V toolchain are
-pinned in `third_party/*_version.conf` and installed below `.build/tools` by
+curl, unzip, tar and Git. Unity, cppcheck, PMD and the RISC-V and Xtensa
+toolchains are pinned in `third_party/*_version.conf` and installed below `.build/tools` by
 `./scripts/ensure_tools.sh`, which verifies revisions and SHA-256 sums.
 The gate only checks that they are present; `--tools-root` or
 `JHBASE_TOOLS_ROOT` selects another location. Tests read the reviewed HAL
@@ -83,6 +83,61 @@ unselected short status enum and accept the explicit fixed-width selector.
 The GNU linker allocation-guard test is Linux-specific.
 
 Cross compilation and static `.su` reports do not establish on-device timing,
-peak runtime stack or linked firmware size. Hardware measurements require a
-separate explicit run. Linux results do not establish MSVC/Win32 acceptance.
-No CI jobs or production generator workflows are added by this prototype.
+peak runtime stack or linked firmware size; the
+[device measurements](#device-measurements) do. Linux results do not establish
+MSVC/Win32 acceptance. No CI jobs or production generator workflows are added
+by this prototype.
+
+## Device measurements
+
+`scripts/measure_device.sh` measures the library on a board. It is a separate,
+explicit run: the gate never builds, flashes or reads device code, and the
+default checks skip `tests/device`.
+
+The script builds the archive of the target's freestanding profile, links it
+into the JaszczurHAL firmware in `tests/device` and flashes the board. The
+firmware parses and writes the documents in `tests/device/inputs`, reads their
+numbers and prints a report. The script adds the bytes the library takes in
+the linked image, read from the linker map.
+
+| Target | Assemblies | Profile | Flashing and report port |
+| --- | --- | --- | --- |
+| `rp2040` | `pico`, `picow` | `cortex-m0plus` | picotool from the HAL `.build/tools`; the board's USB serial port |
+| `stm32g474` | `nucleo`, `nucleo-canhat` | `cortex-m4` | OpenOCD through ST-LINK; the ST-LINK serial port |
+| `esp32s3` | `esp32s3-zero` | `esp32s3` | ESP-IDF set up by HAL; the USB Serial/JTAG port |
+
+```sh
+./scripts/measure_device.sh --target rp2040 --assembly picow --serial <serial>
+./scripts/measure_device.sh --target stm32g474 --assembly nucleo-canhat
+./scripts/measure_device.sh --target esp32s3 --assembly esp32s3-zero
+```
+
+The script needs a JaszczurHAL checkout with its tools installed
+(`--hal-root`, default `../libraries/JaszczurHAL`). An RP2040 also needs
+`--serial`, the number `picotool info -a` prints: picotool flashes only that
+board, and the report port is found by it. The board may wait in BOOTSEL or
+run JaszczurHAL firmware, which enters BOOTSEL when the script closes its USB
+port at 1200 bps. `--port` overrides
+the detected serial port and `--no-flash` only builds and prints the size.
+Builds and `report.txt` stay in `tests/device/.build/<assembly>`. For ESP32-S3
+the script refuses an ESP-IDF build that does not use the Xtensa toolchain
+pinned in `third_party/xtensa_toolchain_version.conf`.
+
+Each `JBM case=` line describes one case:
+
+- `ns` is the time per call: the fastest of five batches of at least 40 ms,
+  with interrupts enabled.
+- `stack` counts the bytes written below the measuring frame, with interrupts
+  masked. Values below 16 B cannot be told apart (`baseline_stack` is an empty
+  call).
+- `scratch_used` is the highest scratch byte the case wrote;
+  `scratch_required` is what the `*_workspace_size` functions ask for.
+
+`JBM size` gives the library code and constants (`flash`) and its static data
+(`ram`) in the linked image. `JBM end` sums up eight independent checks:
+correct rounding of binary32 and binary64 vectors, exact decimal comparison,
+full uint64 and int64 ranges, measure against parse, UTF-8 validation and
+written floats reading back to the same bits. `result=PASS` requires all of
+them. The LED blinks during the measurement, then once per second for PASS or
+five times per second for FAIL; an addressable LED shows blue, then green or
+red.

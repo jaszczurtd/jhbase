@@ -63,13 +63,15 @@ fi
 jb_tools_needed=()
 for jb_name in "${JB_STAGES[@]}"; do
   case "$jb_name" in
-    host | sanitizers | memcheck | clean) jb_tool=unity ;;
-    freestanding) jb_tool=riscv-toolchain ;;
-    analysis) jb_tool=cppcheck ;;
-    quality) jb_tool=pmd ;;
+    host | sanitizers | memcheck | clean) jb_stage_tools=(unity) ;;
+    freestanding) jb_stage_tools=(riscv-toolchain xtensa-toolchain) ;;
+    analysis) jb_stage_tools=(cppcheck) ;;
+    quality) jb_stage_tools=(pmd) ;;
     *) continue ;;
   esac
-  [[ " ${jb_tools_needed[*]-} " == *" ${jb_tool} "* ]] || jb_tools_needed+=("$jb_tool")
+  for jb_tool in "${jb_stage_tools[@]}"; do
+    [[ " ${jb_tools_needed[*]-} " == *" ${jb_tool} "* ]] || jb_tools_needed+=("$jb_tool")
+  done
 done
 if ((${#jb_tools_needed[@]})); then
   "${JB_ROOT}/scripts/ensure_tools.sh" --check --tools-root "$JB_TOOLS" "${jb_tools_needed[@]}"
@@ -78,6 +80,8 @@ fi
 source "${JB_ROOT}/third_party/pmd_version.conf"
 # shellcheck source=/dev/null
 source "${JB_ROOT}/third_party/riscv_toolchain_version.conf"
+# shellcheck source=scripts/freestanding.sh
+source "${JB_ROOT}/scripts/freestanding.sh"
 JB_UNITY="${JB_TOOLS}/Unity"
 
 cmake "-DJHBASE_HAL_ROOT=${JB_HAL}" -P "${JB_ROOT}/cmake/dependencies.cmake"
@@ -136,51 +140,33 @@ fuzz() {
 }
 
 freestanding_profile() {
-  local jb_name="$1" jb_tool="$2"; shift 2
-  local jb_directory="${JB_GATE}/arm/${jb_name}"
-  cmake -E rm -rf "$jb_directory"
-  mkdir -p "$jb_directory"
-  local jb_owned=() jb_objects=()
-  local jb_flags=(-std=c11 -O2 -ffreestanding -fno-builtin -fstrict-aliasing
-    -DHAL_STATUS_FIXED_32 -fstack-usage -ffunction-sections -fdata-sections
-    "-I${JB_ROOT}/include" "-I${JB_HAL}/src" "-I${JB_ROOT}/third_party/ryu")
-  for jb_source in "${JB_ROOT}"/src/*.c; do
-    local jb_object="${jb_directory}/$(basename "${jb_source%.c}").o"
-    "${jb_tool}-gcc" "${jb_flags[@]}" "$@" -Wall -Wextra -Werror -Wpedantic \
-      -Wconversion -Wshadow -Wvla -c "$jb_source" -o "$jb_object"
-    jb_owned+=("$jb_object"); jb_objects+=("$jb_object")
-  done
-  for jb_source in "${JB_ROOT}"/third_party/ryu/ryu/*.c; do
-    local jb_object="${jb_directory}/ryu-$(basename "${jb_source%.c}").o"
-    "${jb_tool}-gcc" "${jb_flags[@]}" "$@" -DNDEBUG -DRYU_OPTIMIZE_SIZE \
-      -DRYU_ONLY_64_BIT_OPS -c "$jb_source" -o "$jb_object"
-    jb_objects+=("$jb_object")
-  done
-  "${jb_tool}-gcc" "${jb_flags[@]}" "$@" -Wall -Wextra -Werror -Wpedantic \
-    -Wconversion -Wshadow -Wvla -c "${JB_ROOT}/tests/link_probe.c" \
+  local jb_name="$1" jb_directory="${JB_GATE}/arm/$1"
+  jb_profile_compile "$jb_name" "$jb_directory"
+  "${JB_PROFILE_TOOL}-gcc" "${JB_PROFILE_COMMON[@]}" "${JB_PROFILE_FLAGS[@]}" \
+    "${JB_PROFILE_WARNINGS[@]}" -c "${JB_ROOT}/tests/link_probe.c" \
     -o "${jb_directory}/link_probe.o"
-  "${jb_tool}-gcc" "$@" -nostartfiles -Wl,--gc-sections,--fatal-warnings \
-    "-Wl,-T,${JB_ROOT}/tests/link_probe.ld" "${jb_directory}/link_probe.o" \
-    "${jb_objects[@]}" -o "${jb_directory}/link_probe.elf"
-  "${jb_tool}-nm" -u "${jb_owned[@]}" > "${jb_directory}/undefined.txt"
-  "${jb_tool}-nm" "${jb_directory}/link_probe.elf" > "${jb_directory}/linked-symbols.txt"
+  # Only libc and libgcc: no syscall stubs (libnosys), whose link warnings
+  # fire before section GC drops Ryu's unused allocating API.
+  "${JB_PROFILE_TOOL}-gcc" "${JB_PROFILE_FLAGS[@]}" -nostdlib \
+    -Wl,--gc-sections,--fatal-warnings "-Wl,-T,${JB_ROOT}/tests/link_probe.ld" \
+    "${jb_directory}/link_probe.o" "${JB_PROFILE_OBJECTS[@]}" -lc -lgcc \
+    -o "${jb_directory}/link_probe.elf"
+  "${JB_PROFILE_TOOL}-nm" -u "${JB_PROFILE_OWNED[@]}" > "${jb_directory}/undefined.txt"
+  "${JB_PROFILE_TOOL}-nm" "${jb_directory}/link_probe.elf" > "${jb_directory}/linked-symbols.txt"
   # Ryu's unused allocating APIs are removed by section GC. Check both owned
   # object references and the complete linked probe, including upstream/libc.
   if rg -n '\b(malloc|calloc|realloc|free|alloca|_malloc_r|_calloc_r|_realloc_r|_free_r)\b' \
       "${jb_directory}/undefined.txt" "${jb_directory}/linked-symbols.txt"; then
     printf '%s\n' 'Portable code depends on dynamic allocation' >&2; return 1
   fi
-  "${jb_tool}-size" "${jb_objects[@]}" > "${jb_directory}/object-sizes.txt"
-  "${jb_tool}-size" "${jb_directory}/link_probe.elf" > "${jb_directory}/linked-probe-size.txt"
+  "${JB_PROFILE_TOOL}-size" "${JB_PROFILE_OBJECTS[@]}" > "${jb_directory}/object-sizes.txt"
+  "${JB_PROFILE_TOOL}-size" "${jb_directory}/link_probe.elf" > "${jb_directory}/linked-probe-size.txt"
 }
 
 freestanding() {
-  for jb_cpu in cortex-m0plus cortex-m33 cortex-m4; do
-    freestanding_profile "$jb_cpu" arm-none-eabi -mcpu="$jb_cpu" -mthumb
+  for jb_name in "${JB_PROFILES[@]}"; do
+    freestanding_profile "$jb_name"
   done
-  freestanding_profile rp2350-riscv \
-    "${JB_TOOLS}/riscv-toolchain/bin/${RISCV_TOOLCHAIN_TRIPLE}" \
-    -march=rv32imac_zicsr_zifencei -mabi=ilp32
 }
 
 comparison() {
@@ -198,7 +184,8 @@ clean() {
   local jb_copy="${JB_GATE}/clean source"
   cmake -E rm -rf "$jb_copy"
   mkdir -p "$jb_copy"
-  tar -C "$JB_ROOT" --exclude=./.git --exclude=./.build --exclude=./evidence \
+  # Every .build directory stays out, also the device builds in tests/device.
+  tar -C "$JB_ROOT" --exclude=./.git --exclude=.build --exclude=./evidence \
     --exclude=./NOW.md -cf - . | tar -C "$jb_copy" -xf -
   cmake -S "$jb_copy" -B "${jb_copy}/.build/host" -G Ninja \
     "-DJHBASE_HAL_ROOT=${JB_HAL}" "-DJHBASE_UNITY_ROOT=${JB_UNITY}" \
