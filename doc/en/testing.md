@@ -117,7 +117,7 @@ the linked image, read from the linker map.
 ```
 
 The script needs a JaszczurHAL checkout with its tools installed
-(`--hal-root`, default `../libraries/JaszczurHAL`). RP boards also need
+(`--hal-root`, default `../JaszczurHAL`). RP boards also need
 `--serial`, the number `picotool info -a` prints (`flash id` on RP2040,
 `chipid` on RP2350): picotool flashes only that board, and the report port is
 found by it. The board may wait in BOOTSEL or

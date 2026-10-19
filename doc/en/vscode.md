@@ -15,7 +15,7 @@ same on Linux, macOS and Windows: `scripts/vscode_workspace.cmake`.
   Ninja and falls back to NMake Makefiles.
 - The pinned Unity sources: `./scripts/ensure_tools.sh unity` on Linux, or
   `JHBASE_TOOLS_ROOT` pointing at an installed tools directory.
-- The HAL headers at `../libraries/JaszczurHAL`, or `JHBASE_HAL_ROOT`.
+- The HAL headers at `../JaszczurHAL`, or `JHBASE_HAL_ROOT`.
 - The `ms-vscode.cpptools` extension; `ms-vscode.cmake-tools` is optional and
   configures below `.build/vscode/cmake-tools`.
 

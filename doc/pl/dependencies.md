@@ -13,7 +13,7 @@ SDK ani generatory produkcyjne nie są konfigurowane ani linkowane.
 
 Hashe nagłówków HAL i źródeł Unity zapisuje
 [dependencies.cmake](../../cmake/dependencies.cmake). Domyślny katalog HAL
-to `../libraries/JaszczurHAL`; inny wybierz przez `JHBASE_HAL_ROOT`.
+to `../JaszczurHAL`; inny wybierz przez `JHBASE_HAL_ROOT`.
 
 `jb::status` przekazuje `HAL_STATUS_FIXED_32`. W GCC/Clang ustala to reprezentację
 enuma statusów na 32 bity bez zmiany globalnych flag rozmiaru enumów ani

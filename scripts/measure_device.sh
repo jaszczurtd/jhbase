@@ -6,7 +6,7 @@
 set -euo pipefail
 
 JB_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
-JB_HAL="${JHBASE_HAL_ROOT:-${JB_ROOT}/../libraries/JaszczurHAL}"
+JB_HAL="${JHBASE_HAL_ROOT:-${JB_ROOT}/../JaszczurHAL}"
 JB_TOOLS="${JHBASE_TOOLS_ROOT:-${JB_ROOT}/.build/tools}"
 jb_target="" jb_assembly="" jb_port="" jb_serial="" jb_flash=1 jb_timeout=60
 while (($#)); do

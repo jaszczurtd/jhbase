@@ -13,7 +13,7 @@ runtime, SDK or production generator is configured or linked.
 
 The HAL header hashes and the Unity source hashes are recorded in
 [dependencies.cmake](../../cmake/dependencies.cmake). The default HAL directory
-is `../libraries/JaszczurHAL`; select another with `JHBASE_HAL_ROOT`.
+is `../JaszczurHAL`; select another with `JHBASE_HAL_ROOT`.
 
 `jb::status` propagates `HAL_STATUS_FIXED_32`. On GCC/Clang this gives the status
 enum a 32-bit representation without changing global enum-size flags or ARM

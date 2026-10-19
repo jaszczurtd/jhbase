@@ -23,7 +23,7 @@ cmake --build .build/host
 ctest --test-dir .build/host --output-on-failure
 ```
 
-The default HAL directory is `../libraries/JaszczurHAL`. Pass
+The default HAL directory is `../JaszczurHAL`. Pass
 `-DJHBASE_HAL_ROOT=/path/to/JaszczurHAL` and, if needed,
 `-DJHBASE_TOOLS_ROOT=/path/to/tools` to select explicit locations.
 Configure downloads nothing and writes nothing to those directories.

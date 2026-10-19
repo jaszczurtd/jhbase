@@ -14,7 +14,7 @@ if(NOT jb_build_prefix EQUAL 0 OR jb_build_dir STREQUAL jb_build_root)
   message(FATAL_ERROR "Use a build directory below jhbase/.build/")
 endif()
 
-set(JHBASE_HAL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../libraries/JaszczurHAL"
+set(JHBASE_HAL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../JaszczurHAL"
     CACHE PATH "HAL supplying only the prototype's status and array headers")
 set(JHBASE_TOOLS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.build/tools"
     CACHE PATH "Pinned gate tools placed there by scripts/ensure_tools.sh")

@@ -90,7 +90,7 @@ z prawem zapisu; paczka ma już wymagany układ sąsiednich katalogów.
 Z katalogu `jhbase` uruchom:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\runalltests.ps1 -HalRoot C:\src\libraries\JaszczurHAL -ToolsRoot C:\src\tools
+powershell -NoProfile -ExecutionPolicy Bypass -File .\runalltests.ps1 -HalRoot C:\src\JaszczurHAL -ToolsRoot C:\src\tools
 ```
 
 Runner buduje i uruchamia te same zestawy CTest dla x64 i Win32. Jedną

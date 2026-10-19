@@ -1,12 +1,15 @@
 [CmdletBinding()]
 param(
-    [string]$HalRoot = (Join-Path $PSScriptRoot '../libraries/JaszczurHAL'),
-    [string]$ToolsRoot = (Join-Path $PSScriptRoot '.build/tools'),
+    [string]$HalRoot = '',
+    [string]$ToolsRoot = '',
     [ValidateSet('x64', 'Win32')][string[]]$Architecture = @('x64', 'Win32'),
     [ValidateRange(1, 256)][int]$Jobs = 4
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+# Windows PowerShell 5.1 leaves $PSScriptRoot empty in parameter defaults.
+if (-not $HalRoot) { $HalRoot = Join-Path $PSScriptRoot '../JaszczurHAL' }
+if (-not $ToolsRoot) { $ToolsRoot = Join-Path $PSScriptRoot '.build/tools' }
 
 function Invoke-Checked {
     param([string]$Program, [string[]]$Arguments)

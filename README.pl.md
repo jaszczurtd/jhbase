@@ -23,7 +23,7 @@ cmake --build .build/host
 ctest --test-dir .build/host --output-on-failure
 ```
 
-Domyślny katalog HAL to `../libraries/JaszczurHAL`.
+Domyślny katalog HAL to `../JaszczurHAL`.
 `-DJHBASE_HAL_ROOT=/path/to/JaszczurHAL` oraz, w razie potrzeby,
 `-DJHBASE_TOOLS_ROOT=/path/to/tools` pozwalają wskazać inne lokalizacje.
 Configure niczego nie pobiera ani nie zapisuje w tych katalogach.

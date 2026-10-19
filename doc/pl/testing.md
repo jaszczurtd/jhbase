@@ -118,7 +118,7 @@ biblioteka w zlinkowanym obrazie, na podstawie mapy linkera.
 ```
 
 Skrypt potrzebuje checkoutu JaszczurHAL z zainstalowanymi narzędziami
-(`--hal-root`, domyślnie `../libraries/JaszczurHAL`). Płytki RP wymagają też
+(`--hal-root`, domyślnie `../JaszczurHAL`). Płytki RP wymagają też
 `--serial`, czyli numeru wypisanego przez `picotool info -a` (`flash id` na
 RP2040, `chipid` na RP2350): picotool wgrywa firmware tylko na tę płytkę,
 a skrypt po tym numerze znajduje port raportu.

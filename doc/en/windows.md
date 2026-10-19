@@ -90,7 +90,7 @@ already has the required sibling layout.
 From the `jhbase` directory:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\runalltests.ps1 -HalRoot C:\src\libraries\JaszczurHAL -ToolsRoot C:\src\tools
+powershell -NoProfile -ExecutionPolicy Bypass -File .\runalltests.ps1 -HalRoot C:\src\JaszczurHAL -ToolsRoot C:\src\tools
 ```
 
 The runner builds and runs the same CTest suites for x64 and Win32. Select only
