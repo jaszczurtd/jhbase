@@ -20,10 +20,11 @@ while (($#)); do
     --timeout) jb_timeout="${2:?--timeout needs seconds}"; shift 2 ;;
     --no-flash) jb_flash=0; shift ;;
     --help)
-      printf '%s\n' 'Usage: scripts/measure_device.sh --target rp2040|stm32g474|esp32s3' \
+      printf '%s\n' 'Usage: scripts/measure_device.sh' \
+        '         --target rp2040|rp2350-arm|rp2350-riscv|stm32g474|esp32s3' \
         '         --assembly NAME [--serial SERIAL] [--port DEVICE] [--hal-root PATH]' \
         '         [--tools-root PATH] [--timeout SECONDS] [--no-flash]' \
-        '  --serial: required for rp2040, the board picotool may flash'
+        '  --serial: required for RP targets, the board picotool may flash'
       exit 0 ;;
     *) printf 'Unknown argument: %s\n' "$1" >&2; exit 2 ;;
   esac
@@ -31,13 +32,16 @@ done
 fail() { printf '%s\n' "$*" >&2; exit 1; }
 [[ -n "$jb_assembly" ]] || fail '--assembly is required (see tests/device/device_tree.json)'
 case "$jb_target" in
-  rp2040) jb_profile_name=cortex-m0plus
-    # Name the board: picotool and the port lookup use its serial number.
-    [[ -n "$jb_serial" ]] || fail '--serial is required for rp2040 (picotool info -a shows it)' ;;
+  rp2040) jb_profile_name=cortex-m0plus ;;
+  rp2350-arm) jb_profile_name=cortex-m33 ;;
+  rp2350-riscv) jb_profile_name=rp2350-riscv ;;
   stm32g474) jb_profile_name=cortex-m4 ;;
   esp32s3) jb_profile_name=esp32s3 ;;
   *) fail "Unsupported target: ${jb_target:-none}" ;;
 esac
+# Name an RP board: picotool and the port lookup use its serial number.
+[[ "$jb_target" != rp* || -n "$jb_serial" ]] ||
+  fail "--serial is required for ${jb_target} (picotool info -a shows it)"
 JB_HAL="$(cd "$JB_HAL" && pwd -P)"
 JB_TOOLS="$(cd "$JB_TOOLS" && pwd -P)"
 jb_project="${JB_ROOT}/tests/device"
@@ -51,8 +55,13 @@ source "${JB_ROOT}/third_party/riscv_toolchain_version.conf"
 source "${JB_ROOT}/third_party/xtensa_toolchain_version.conf"
 # shellcheck source=scripts/freestanding.sh
 source "${JB_ROOT}/scripts/freestanding.sh"
-[[ "$jb_target" != esp32s3 ]] ||
-  "${JB_ROOT}/scripts/ensure_tools.sh" --check --tools-root "$JB_TOOLS" xtensa-toolchain
+case "$jb_target" in
+  rp2350-riscv) jb_toolchain=riscv-toolchain ;;
+  esp32s3) jb_toolchain=xtensa-toolchain ;;
+  *) jb_toolchain="" ;;
+esac
+[[ -z "$jb_toolchain" ]] ||
+  "${JB_ROOT}/scripts/ensure_tools.sh" --check --tools-root "$JB_TOOLS" "$jb_toolchain"
 jb_profile_compile "$jb_profile_name" "${jb_dir}/lib"
 
 # The inputs as byte arrays; char may be signed, so they are unsigned char.
@@ -86,14 +95,27 @@ case "$jb_target" in
     jb_cmake=(-S "${JB_HAL}/cmake/jh_firmware_project" -B "${jb_dir}/cmake" -G Ninja
       "-DJH_PROJECT_DIR=${jb_project}" "-DJH_ASSEMBLY=${jb_assembly}" "-DJH_TARGET=${jb_target}"
       "-DJH_MODULE_NAME=jhbase_device" "-DJH_ARTIFACT_DIR=${jb_dir}/artifacts"
-      "-DJH_LINK_LIBRARIES=${jb_dir}/lib/libjhbase.a" "-DJH_EXTRA_INCLUDES=${jb_includes}")
+      "-DJH_LINK_LIBRARIES=${jb_dir}/lib/libjhbase.a" "-DJH_EXTRA_INCLUDES=${jb_includes}"
+      -DCMAKE_EXPORT_COMPILE_COMMANDS=ON)
     if [[ "$jb_target" == stm32g474 ]]; then
       jb_cmake+=("-DCMAKE_TOOLCHAIN_FILE=${JB_HAL}/link_libraries/stm32_lib/toolchain_stm32g474.cmake")
     else
       jb_cmake+=("-DPICO_SDK_PATH=${JB_HAL}/third_party/pico-sdk"
         "-DJH_PICOTOOL_EXECUTABLE=${JB_HAL}/.build/tools/picotool/picotool")
+      # The firmware is compiled by the GCC that compiled the archive.
+      [[ "$jb_target" != rp2350-riscv ]] ||
+        jb_cmake+=("-DPICO_TOOLCHAIN_PATH=${JB_TOOLS}/riscv-toolchain")
     fi
     cmake "${jb_cmake[@]}"
+    # The archive has the profile's ABI; refuse firmware built with other
+    # machine flags (-m...), as the two would not share one ABI.
+    jb_machine_flags() { { grep -oE -- '(^| )-m[^ ]+' || true; } | sed 's/^ //' | sort -u; }
+    jb_firmware_flags="$(grep -F -- "-c ${jb_project}/app.c\"" \
+      "${jb_dir}/cmake/compile_commands.json" | jb_machine_flags)"
+    jb_archive_flags="$(printf ' %s' "${JB_PROFILE_FLAGS[@]}" | jb_machine_flags)"
+    [[ -n "$jb_firmware_flags" && "$jb_firmware_flags" == "$jb_archive_flags" ]] ||
+      fail "Firmware flags (${jb_firmware_flags//$'\n'/ }) differ from profile" \
+        "${jb_profile_name} (${jb_archive_flags//$'\n'/ })"
     cmake --build "${jb_dir}/cmake"
     jb_map="${jb_dir}/artifacts/firmware.map"
     ;;
@@ -129,12 +151,12 @@ by_id() {
   name="$(ls /dev/serial/by-id 2>/dev/null | grep -m1 -- "$1" || true)"
   [[ -z "$name" ]] || printf '/dev/serial/by-id/%s\n' "$name"
 }
-# find_port: the board's serial port, waiting for it to appear. The RP2040
+# find_port: the board's serial port, waiting for it to appear. The RP
 # firmware's USB port carries the chip serial; the others use the probe's port.
 find_port() {
   local pattern port
   case "$jb_target" in
-    rp2040) pattern="$jb_serial" ;;
+    rp*) pattern="$jb_serial" ;;
     stm32g474) pattern=STLINK ;;
     esp32s3) pattern=Espressif ;;
   esac
@@ -145,9 +167,9 @@ find_port() {
   done
   fail 'No serial port of the board appeared; pass --port'
 }
-[[ -n "$jb_port" || "$jb_target" == rp2040 ]] || jb_port="$(find_port)"
+[[ -n "$jb_port" || "$jb_target" == rp* ]] || jb_port="$(find_port)"
 case "$jb_target" in
-  rp2040)
+  rp*)
     # HAL firmware enters BOOTSEL when its USB port is closed at 1200 bps.
     jb_running="$(by_id "$jb_serial")"
     [[ -z "$jb_running" ]] || stty -F "$jb_running" 1200 hupcl 2>/dev/null || true
@@ -159,7 +181,7 @@ case "$jb_target" in
         jb_loaded=1; break
       fi
     done
-    ((jb_loaded)) || fail "No RP2040 with serial ${jb_serial} in BOOTSEL" ;;
+    ((jb_loaded)) || fail "No ${jb_target} board with serial ${jb_serial} in BOOTSEL" ;;
   stm32g474) openocd -f interface/stlink.cfg -f target/stm32g4x.cfg \
     -c "program ${jb_dir}/artifacts/firmware.elf verify reset exit" ;;
   esp32s3) "${jb_esp[0]}" "${jb_esp[1]}" flash "${jb_esp[@]:2}" --port "$jb_port" ;;

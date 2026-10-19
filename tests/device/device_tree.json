@@ -19,6 +19,22 @@
       "buses": {},
       "nodes": {"hat": {"present": false}}
     },
+    "pico2w": {
+      "target": "rp2350-arm",
+      "board": "pico2w",
+      "clock": {"tree": "default"},
+      "statusLed": {"node": "board.statusLed"},
+      "buses": {},
+      "nodes": {"hat": {"present": false}}
+    },
+    "pico2-riscv": {
+      "target": "rp2350-riscv",
+      "board": "pico2",
+      "clock": {"tree": "default"},
+      "statusLed": {"node": "board.statusLed"},
+      "buses": {},
+      "nodes": {"hat": {"present": false}}
+    },
     "nucleo-canhat": {
       "target": "stm32g474",
       "board": "nucleo-g474re",

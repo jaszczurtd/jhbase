@@ -11,7 +11,7 @@ wyłącznie własną kopię źródeł.
 | `sanitizers` | Clang ASan, UBSan i LeakSanitizer obejmujące bibliotekę i programy testowe. |
 | `memcheck` | Valgrind na właściwych executable testów, probe literałów i przykładów. |
 | `fuzz` | Osobne przebiegi libFuzzer z ustalonym seedem dla parsera/UTF-8, dokładnych liczb/literałów i operacji writera; każdy ma ograniczoną liczbę prób. |
-| `freestanding` | Kompilacja, archiwum i linkowanie probe analitycznego dla profili z `scripts/freestanding.sh`: Cortex-M0+, M33, M4 z ABI hard-float jak firmware STM32G474, RP2350 RISC-V i ESP32-S3 (Xtensa); rozmiary, raport stosu i odrzucanie symboli heap we własnych obiektach i kompletnym probe. |
+| `freestanding` | Kompilacja, archiwum i linkowanie probe analitycznego dla profili z `scripts/freestanding.sh`: Cortex-M0+ (RP2040), M33 (RP2350 ARM, softfp), M4 (STM32G474, hard-float), RP2350 RISC-V i ESP32-S3 (Xtensa), każdy z flagami maszynowymi firmware swojej platformy; rozmiary, raport stosu i odrzucanie symboli heap we własnych obiektach i kompletnym probe. |
 | `comparison` | Przypięte porównanie coreJSON/yyjson z instrumentacją źródeł upstream i właściwego parsera. |
 | `clean` | Pierwszy configure/build/test w kopii źródeł ze spacjami, bez stanu buildu; potem build przyrostowy. |
 | `analysis` | Build cppcheck przypięty w `third_party/cppcheck_version.conf` sprawdza przenośne moduły C. |
@@ -104,19 +104,24 @@ biblioteka w zlinkowanym obrazie, na podstawie mapy linkera.
 | Platforma | Montaże | Profil | Wgrywanie i port raportu |
 | --- | --- | --- | --- |
 | `rp2040` | `pico`, `picow` | `cortex-m0plus` | picotool z `.build/tools` HAL; port USB płytki |
+| `rp2350-arm` | `pico2w` | `cortex-m33` | picotool z `.build/tools` HAL; port USB płytki |
+| `rp2350-riscv` | `pico2-riscv` | `rp2350-riscv` | picotool z `.build/tools` HAL; port USB płytki |
 | `stm32g474` | `nucleo`, `nucleo-canhat` | `cortex-m4` | OpenOCD przez ST-LINK; port szeregowy ST-LINK |
 | `esp32s3` | `esp32s3-zero` | `esp32s3` | ESP-IDF przygotowany przez HAL; port USB Serial/JTAG |
 
 ```sh
 ./scripts/measure_device.sh --target rp2040 --assembly picow --serial <serial>
+./scripts/measure_device.sh --target rp2350-arm --assembly pico2w --serial <serial>
+./scripts/measure_device.sh --target rp2350-riscv --assembly pico2-riscv --serial <serial>
 ./scripts/measure_device.sh --target stm32g474 --assembly nucleo-canhat
 ./scripts/measure_device.sh --target esp32s3 --assembly esp32s3-zero
 ```
 
 Skrypt potrzebuje checkoutu JaszczurHAL z zainstalowanymi narzędziami
-(`--hal-root`, domyślnie `../libraries/JaszczurHAL`). RP2040 wymaga też
-`--serial`, czyli numeru wypisanego przez `picotool info -a`: picotool wgrywa
-firmware tylko na tę płytkę, a skrypt po tym numerze znajduje port raportu.
+(`--hal-root`, domyślnie `../libraries/JaszczurHAL`). Płytki RP wymagają też
+`--serial`, czyli numeru wypisanego przez `picotool info -a` (`flash id` na
+RP2040, `chipid` na RP2350): picotool wgrywa firmware tylko na tę płytkę,
+a skrypt po tym numerze znajduje port raportu.
 Płytka może czekać w trybie BOOTSEL albo działać z firmware JaszczurHAL, który
 przechodzi w BOOTSEL, gdy skrypt zamknie jego port USB przy 1200 b/s.
 `--port` zastępuje wykryty port szeregowy, a `--no-flash` tylko buduje
@@ -124,6 +129,16 @@ i wypisuje rozmiar. Buildy i `report.txt` zostają
 w `tests/device/.build/<montaż>`. Dla ESP32-S3 skrypt odrzuca build ESP-IDF,
 który nie używa toolchainu Xtensa przypiętego
 w `third_party/xtensa_toolchain_version.conf`.
+
+Archiwum i firmware muszą mieć to samo ABI. W buildach Pico SDK i STM32 skrypt
+porównuje flagi maszynowe (opcje `-m`) pliku `app.c` z profilem i przerywa
+pracę, gdy się różnią. Firmware RP2350 RISC-V kompiluje ten sam przypięty GCC
+z `.build/tools`, który kompiluje archiwum.
+
+Montaż `pico2-riscv` opisuje Pico 2 z diodą na GPIO25. Działa też na Pico 2 W,
+ale dioda wtedy nie świeci, bo na tej płytce jest podłączona do CYW43, którego
+HAL nie obsługuje w buildach RISC-V. O wyniku informuje wtedy tylko raport na
+porcie szeregowym.
 
 Każda linia `JBM case=` opisuje jeden przypadek:
 

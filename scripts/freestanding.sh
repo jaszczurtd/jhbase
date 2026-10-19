@@ -1,7 +1,8 @@
 # Freestanding profiles: compiler and target ABI flags of each profile. The
 # gate (runalltests.sh, stage freestanding) builds and links every profile;
 # scripts/measure_device.sh links the archive of a profile into device
-# firmware, so the flags of a profile are the firmware ABI of its target.
+# firmware, so the flags of a profile are the firmware ABI of its target
+# (the script refuses Pico SDK and STM32 firmware with other -m flags).
 # Sourced by both; expects JB_ROOT, JB_HAL, JB_TOOLS and the RISC-V pin.
 
 JB_PROFILES=(cortex-m0plus cortex-m33 cortex-m4 rp2350-riscv esp32s3)
@@ -10,13 +11,16 @@ JB_PROFILES=(cortex-m0plus cortex-m33 cortex-m4 rp2350-riscv esp32s3)
 jb_profile() {
   JB_PROFILE_TOOL=arm-none-eabi
   case "$1" in
-    cortex-m0plus) JB_PROFILE_FLAGS=(-mcpu=cortex-m0plus -mthumb) ;;
-    cortex-m33) JB_PROFILE_FLAGS=(-mcpu=cortex-m33 -mthumb) ;;
+    cortex-m0plus) JB_PROFILE_FLAGS=(-mcpu=cortex-m0plus -mthumb -mfloat-abi=soft) ;;
+    # RP2350 ARM: the Pico SDK flags of a secure image, FPU instructions with
+    # the softfp ABI.
+    cortex-m33) JB_PROFILE_FLAGS=(-mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mcmse -mfloat-abi=softfp) ;;
     # STM32G474 firmware uses the hard-float ABI.
     cortex-m4) JB_PROFILE_FLAGS=(-mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard) ;;
+    # The flags the Pico SDK picks for the pinned GCC (Zcb and Zcmp accepted).
     rp2350-riscv)
       JB_PROFILE_TOOL="${JB_TOOLS}/riscv-toolchain/bin/${RISCV_TOOLCHAIN_TRIPLE}"
-      JB_PROFILE_FLAGS=(-march=rv32imac_zicsr_zifencei -mabi=ilp32) ;;
+      JB_PROFILE_FLAGS=(-march=rv32ima_zicsr_zifencei_zba_zbb_zbs_zbkb_zca_zcb_zcmp -mabi=ilp32 -mstrict-align) ;;
     # ESP-IDF compiles Xtensa code with long calls.
     esp32s3)
       JB_PROFILE_TOOL="${JB_TOOLS}/xtensa-toolchain/bin/xtensa-esp32s3-elf"

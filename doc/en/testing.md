@@ -10,7 +10,7 @@ corpora stay below `.build/gate`; the `clean` stage replaces only its own copy.
 | `sanitizers` | Clang ASan, UBSan and LeakSanitizer over library and executables. |
 | `memcheck` | Valgrind over the actual test executables, literal probes and examples. |
 | `fuzz` | Separate seeded libFuzzer runs for parser/UTF-8, exact numbers/literals and writer operations; each has a bounded run count. |
-| `freestanding` | Compile, archive and link an analysis probe for the profiles in `scripts/freestanding.sh`: Cortex-M0+, M33, M4 with the STM32G474 hard-float ABI, RP2350 RISC-V and ESP32-S3 (Xtensa); collect sizes/stack usage and reject heap symbols in owned objects and the complete linked probe. |
+| `freestanding` | Compile, archive and link an analysis probe for the profiles in `scripts/freestanding.sh`: Cortex-M0+ (RP2040), M33 (RP2350 ARM, softfp), M4 (STM32G474, hard-float), RP2350 RISC-V and ESP32-S3 (Xtensa), each with the machine flags of its firmware; collect sizes/stack usage and reject heap symbols in owned objects and the complete linked probe. |
 | `comparison` | Run the pinned coreJSON/yyjson comparison with instrumented upstream sources and the production parser. |
 | `clean` | First configure/build/test from a source copy with spaces and no build state, then an incremental build. |
 | `analysis` | The cppcheck build pinned by `third_party/cppcheck_version.conf`, checking the portable C modules. |
@@ -103,25 +103,40 @@ the linked image, read from the linker map.
 | Target | Assemblies | Profile | Flashing and report port |
 | --- | --- | --- | --- |
 | `rp2040` | `pico`, `picow` | `cortex-m0plus` | picotool from the HAL `.build/tools`; the board's USB serial port |
+| `rp2350-arm` | `pico2w` | `cortex-m33` | picotool from the HAL `.build/tools`; the board's USB serial port |
+| `rp2350-riscv` | `pico2-riscv` | `rp2350-riscv` | picotool from the HAL `.build/tools`; the board's USB serial port |
 | `stm32g474` | `nucleo`, `nucleo-canhat` | `cortex-m4` | OpenOCD through ST-LINK; the ST-LINK serial port |
 | `esp32s3` | `esp32s3-zero` | `esp32s3` | ESP-IDF set up by HAL; the USB Serial/JTAG port |
 
 ```sh
 ./scripts/measure_device.sh --target rp2040 --assembly picow --serial <serial>
+./scripts/measure_device.sh --target rp2350-arm --assembly pico2w --serial <serial>
+./scripts/measure_device.sh --target rp2350-riscv --assembly pico2-riscv --serial <serial>
 ./scripts/measure_device.sh --target stm32g474 --assembly nucleo-canhat
 ./scripts/measure_device.sh --target esp32s3 --assembly esp32s3-zero
 ```
 
 The script needs a JaszczurHAL checkout with its tools installed
-(`--hal-root`, default `../libraries/JaszczurHAL`). An RP2040 also needs
-`--serial`, the number `picotool info -a` prints: picotool flashes only that
-board, and the report port is found by it. The board may wait in BOOTSEL or
+(`--hal-root`, default `../libraries/JaszczurHAL`). RP boards also need
+`--serial`, the number `picotool info -a` prints (`flash id` on RP2040,
+`chipid` on RP2350): picotool flashes only that board, and the report port is
+found by it. The board may wait in BOOTSEL or
 run JaszczurHAL firmware, which enters BOOTSEL when the script closes its USB
 port at 1200 bps. `--port` overrides
 the detected serial port and `--no-flash` only builds and prints the size.
 Builds and `report.txt` stay in `tests/device/.build/<assembly>`. For ESP32-S3
 the script refuses an ESP-IDF build that does not use the Xtensa toolchain
 pinned in `third_party/xtensa_toolchain_version.conf`.
+
+The archive and the firmware must share one ABI. For the Pico SDK and STM32
+builds the script compares the machine flags (the `-m` options) of `app.c`
+with the profile and stops when they differ. RP2350 RISC-V firmware is
+compiled by the same pinned GCC from `.build/tools` that compiles the archive.
+
+The `pico2-riscv` assembly describes a Pico 2 with its LED on GPIO25. It also
+runs on a Pico 2 W, but the LED stays dark there: that board's LED is wired to
+the CYW43, which HAL does not drive in RISC-V builds. The serial report is then
+the only sign of the result.
 
 Each `JBM case=` line describes one case:
 

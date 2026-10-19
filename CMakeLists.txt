@@ -127,8 +127,12 @@ if(BUILD_TESTING)
     COMMAND test_literals --emit-probe "${jb_probe_c}" "${jb_literal_fixture}"
     COMMAND "${CMAKE_COMMAND}" -E copy "${jb_probe_c}" "${jb_probe_cpp}"
     DEPENDS test_literals "${jb_literal_fixture}" VERBATIM)
+  # One target runs the generator first: Visual Studio copies the rule into each
+  # probe project, and MSBuild would otherwise run both copies at once.
+  add_custom_target(jb_literal_probes DEPENDS "${jb_probe_c}" "${jb_probe_cpp}")
   foreach(language c cpp)
     add_executable(test_literal_probe_${language} "${jb_probe_${language}}")
+    add_dependencies(test_literal_probe_${language} jb_literal_probes)
     jb_warnings(test_literal_probe_${language})
     add_test(NAME literal_probe_${language} COMMAND test_literal_probe_${language})
     set_tests_properties(literal_probe_${language} PROPERTIES TIMEOUT 30 LABELS "basic")
