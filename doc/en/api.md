@@ -6,8 +6,8 @@ storage. Include [utf8.h](../../include/jb/utf8.h) for text operations and
 [json.h](../../include/jb/json.h) for JSON. Both headers also work in C++17.
 
 For exact conversions and C literals, see [numbers](numbers.md).
-For sequential output, see [the writer](writer.md). JSON Pointer, JSON Schema
-remain outside this prototype. Optional NFC is described below. Build instructions and platform limits
+For sequential output, see [the writer](writer.md). JSON Pointer is described
+below; JSON Schema remains outside this prototype. Optional NFC is described below. Build instructions and platform limits
 are in [the test guide](testing.md).
 
 ## Common rules
@@ -756,6 +756,61 @@ A value containing U+0000 cannot be a C string. It gives `HAL_ETYPE` and
 leaves both outputs unchanged instead of truncating silently; read such data
 with `jb_json_string_copy`. A non-string also gives `HAL_ETYPE`. A missing
 `required` pointer or `NULL` `buffer` with nonzero capacity gives `HAL_EINVAL`.
+
+## JSON Pointer
+
+[json_pointer.h](../../include/jb/json_pointer.h) locates a value by a plain
+UTF-8 [RFC 6901](https://www.rfc-editor.org/rfc/rfc6901) path and writes the
+path of an existing node. Link `jb::base`; unused pointer code is omitted
+by the linker. Both operations use constant stack space, without heap or
+scratch. Documents retain the usual borrowing and non-overlap rules.
+
+```c
+hal_status_t jb_json_pointer_get(const jb_json_doc_t *doc,
+                                 jb_json_span_t pointer, jb_json_node_t *out);
+hal_status_t jb_json_pointer_copy(jb_json_node_t node, char *buffer,
+                                  size_t capacity, size_t *required);
+```
+
+`get` starts at root. An empty span selects root; `/` selects an empty
+object name. Decode `~0` as `~` and `~1` as `/`, so `/a~1b` selects `a/b`
+and `/~01` selects `~1`. Names are compared after JSON decoding, without
+NFC or case folding. NUL is part of a name; pass explicit byte lengths.
+URI fragments such as `#/foo` and JSON-quoted strings need caller decoding.
+
+Array indices have decimal digits without leading zeros. Invalid spelling,
+pointer escapes or UTF-8 give `HAL_EPROTO`; syntax is checked over the entire
+path before lookup. Missing names, indices beyond the array and `-` give
+`HAL_ENOENT`, including numeric indices too large for a machine word.
+Object names such as `01` or `-` stay literal. Traversing a scalar gives
+`HAL_ETYPE`; invalid documents give `HAL_ESTATE`, bad pointers `HAL_EINVAL`.
+The result node stays unchanged on error. Member and item scans are linear;
+the caller bounds repeated lookups.
+
+`copy` writes plain UTF-8 without a terminator; `required` counts bytes,
+including embedded NUL. `(NULL,0)` measures and root requires zero bytes.
+Insufficient capacity gives `HAL_EOVERFLOW`, reports the full size and
+leaves the buffer untouched. Other errors preserve `required`. The function
+walks parent links twice, scans siblings for array positions and uses the
+shared JSON decoder for names, escaping only `/` and `~`.
+
+For `{"flags":[true,false]}`, the following helper reads `false` with
+the eight-byte path `/flags/1`.
+
+```c
+#include <jb/json_pointer.h>
+
+/** Read a boolean at a plain JSON Pointer without changing it on failure. */
+hal_status_t example_pointer_bool(const jb_json_doc_t *doc,
+                                  jb_json_span_t path, bool *out) {
+    if (out == NULL) {
+        return HAL_EINVAL;
+    }
+    jb_json_node_t node;
+    hal_status_t status = jb_json_pointer_get(doc, path, &node);
+    return status == HAL_OK ? jb_json_get_bool(node, out) : status;
+}
+```
 
 ## Results and ABI
 

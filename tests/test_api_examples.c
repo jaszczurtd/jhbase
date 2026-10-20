@@ -49,6 +49,9 @@ static void test_array_examples(void) {
   bool flag = true;
   TEST_ASSERT_EQUAL(HAL_OK, example_flag_at(&document.doc, 1, &flag));
   TEST_ASSERT_FALSE(flag);
+  const jb_json_span_t path = {"/flags/1", 8};
+  TEST_ASSERT_EQUAL(HAL_OK, example_pointer_bool(&document.doc, path, &flag));
+  TEST_ASSERT_FALSE(flag);
   TEST_ASSERT_EQUAL(HAL_ENOENT, example_flag_at(&document.doc, 3, &flag));
   (void)test_parse("{\"flags\":[true,1]}", &document);
   count = 99;

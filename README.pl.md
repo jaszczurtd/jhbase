@@ -51,7 +51,8 @@ składnia skryptów).
 Opcjonalne NFC i właściwości znaków włącza `JHBASE_UNICODE=ON` i target
 `jb::unicode`; opisuje je [sekcja Unicode](doc/pl/api.md#unicode).
 Przypięty checkout przygotowuje `cmake -P scripts/ensure_utf8proc.cmake`.
-JSON Pointer i JSON Schema są poza obecnym zakresem.
+JSON Pointer odczytuje i zapisuje ścieżki przez [json_pointer.h](include/jb/json_pointer.h).
+JSON Schema pozostaje poza obecnym zakresem.
 Publiczne ABI prototypu może zmienić się przed pierwszą integracją.
 
 Licencja: [JaszczurHAL Attribution License (MIT-based)](LICENSE).

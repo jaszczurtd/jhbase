@@ -1,6 +1,7 @@
 #ifndef JB_LIBRARY_EXERCISE_H
 #define JB_LIBRARY_EXERCISE_H
 #include "jb/json_number.h"
+#include "jb/json_pointer.h"
 #include "jb/json_writer.h"
 #include "jb/literal.h"
 #include <jb/array.h>
@@ -51,6 +52,12 @@ static inline int library_exercise(void) {
   }
   bool same;
   size_t required;
+  jb_json_node_t pointed;
+  if (jb_json_pointer_copy(gain, literal, sizeof(literal), &required) != HAL_OK || required != 5 ||
+      jb_json_pointer_get(&doc, (jb_json_span_t){literal, required}, &pointed) != HAL_OK ||
+      pointed.index != gain.index) {
+    return 9;
+  }
   if (jb_json_string_equal(unit, volts, &same) != HAL_OK || !same ||
       jb_json_string_cstr(unit, literal, sizeof(literal), &required) != HAL_OK || required != 2) {
     return 4;

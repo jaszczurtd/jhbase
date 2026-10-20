@@ -43,7 +43,7 @@ target_include_directories(jb_status INTERFACE
 add_library(jb_ryu OBJECT third_party/ryu/ryu/f2s.c third_party/ryu/ryu/d2s.c)
 target_include_directories(jb_ryu PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ryu")
 target_compile_definitions(jb_ryu PRIVATE RYU_OPTIMIZE_SIZE RYU_ONLY_64_BIT_OPS NDEBUG)
-add_library(jhbase STATIC src/utf8.c src/json_parse.c src/json_string.c src/json_read.c
+add_library(jhbase STATIC src/utf8.c src/json_parse.c src/json_string.c src/json_read.c src/json_pointer.c
   src/number_big.c src/json_number.c src/number_format.c src/json_writer.c src/literal.c)
 target_sources(jhbase PRIVATE $<TARGET_OBJECTS:jb_ryu>)
 target_include_directories(jhbase PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ryu")

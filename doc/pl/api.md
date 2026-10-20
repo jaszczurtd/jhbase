@@ -7,8 +7,8 @@ z pamięci wywołującego. Operacje tekstowe deklaruje
 Oba nagłówki można również dołączać z C++17.
 
 Dokładne konwersje i literały C opisuje [moduł liczb](numbers.md),
-a zapis sekwencyjny - [writer](writer.md). JSON Pointer i JSON Schema
-pozostają poza obecnym zakresem. Opcjonalne NFC opisano niżej. Sposób kompilacji i ograniczenia platform
+a zapis sekwencyjny - [writer](writer.md). JSON Pointer opisano niżej;
+JSON Schema pozostaje poza obecnym zakresem. Opcjonalne NFC opisano niżej. Sposób kompilacji i ograniczenia platform
 opisano w [dokumencie o testach](testing.md).
 
 ## Wspólne zasady
@@ -774,6 +774,63 @@ i pozostawia oba wyjścia bez zmian zamiast cichego skrócenia; takie dane
 czytaj przez `jb_json_string_copy`. Wartość inna niż string również daje
 `HAL_ETYPE`. Brak `required` lub `NULL` `buffer` przy niezerowej pojemności
 daje `HAL_EINVAL`.
+
+## JSON Pointer
+
+[json_pointer.h](../../include/jb/json_pointer.h) wyszukuje wartość według
+zwykłej ścieżki UTF-8 z [RFC 6901](https://www.rfc-editor.org/rfc/rfc6901)
+i zapisuje ścieżkę istniejącego węzła. Linkuj `jb::base`; linker pomija
+nieużywany kod pointer. Obie operacje używają stałej ilości stosu,
+bez heap ani scratch. Obowiązują zwykłe zasady czasu życia dokumentu
+i zakaz nakładania buforów.
+
+```c
+hal_status_t jb_json_pointer_get(const jb_json_doc_t *doc,
+                                 jb_json_span_t pointer, jb_json_node_t *out);
+hal_status_t jb_json_pointer_copy(jb_json_node_t node, char *buffer,
+                                  size_t capacity, size_t *required);
+```
+
+`get` zaczyna od root. Pusty span wybiera root, a `/` pustą nazwę pola.
+`~0` oznacza `~`, a `~1` oznacza `/`, więc `/a~1b` wybiera `a/b`,
+a `/~01` wybiera `~1`. Nazwy są porównywane po dekodowaniu JSON, bez NFC
+ani case folding. NUL jest częścią nazwy; podawaj jawną liczbę bajtów.
+Fragmenty URI takie jak `#/foo` i stringi w cudzysłowach JSON wymagają
+wcześniejszego dekodowania przez wywołującego.
+
+Indeksy tablic mają cyfry dziesiętne bez zer wiodących. Błędny zapis,
+escape pointer lub UTF-8 daje `HAL_EPROTO`; składnia całej ścieżki jest
+sprawdzana przed wyszukiwaniem. Brak pola, indeks poza tablicą i `-` dają
+`HAL_ENOENT`, także gdy indeks liczbowy nie mieści się w słowie maszynowym.
+Nazwy obiektu takie jak `01` i `-` są dosłowne. Przechodzenie przez wartość
+prostą daje `HAL_ETYPE`; błędny dokument `HAL_ESTATE`, błędne wskaźniki
+`HAL_EINVAL`. Węzeł wynikowy pozostaje bez zmian przy błędzie. Przeglądanie
+pól i elementów jest liniowe; wywołujący ogranicza powtarzane wyszukiwania.
+
+`copy` zapisuje zwykłe UTF-8 bez terminatora; `required` liczy bajty,
+także wewnętrzny NUL. `(NULL,0)` mierzy, a root wymaga zera bajtów.
+Za mały bufor daje `HAL_EOVERFLOW`, pozostaje bez zmian, a `required`
+podaje pełny rozmiar. Inne błędy zachowują `required`. Funkcja dwa razy
+przechodzi po rodzicach, przegląda rodzeństwo dla indeksów tablic i używa
+wspólnego dekodera JSON dla nazw, kodując tylko `/` i `~`.
+
+Dla `{"flags":[true,false]}` poniższy helper odczytuje `false`
+z ośmiobajtowej ścieżki `/flags/1`.
+
+```c
+#include <jb/json_pointer.h>
+
+/** Read a boolean at a plain JSON Pointer without changing it on failure. */
+hal_status_t example_pointer_bool(const jb_json_doc_t *doc,
+                                  jb_json_span_t path, bool *out) {
+    if (out == NULL) {
+        return HAL_EINVAL;
+    }
+    jb_json_node_t node;
+    hal_status_t status = jb_json_pointer_get(doc, path, &node);
+    return status == HAL_OK ? jb_json_get_bool(node, out) : status;
+}
+```
 
 ## Wyniki i ABI
 

@@ -1,4 +1,5 @@
 #include "jb/json.h"
+#include "jb/json_pointer.h"
 #include "unity.h"
 #include <jb/array.h>
 #include <string.h>
@@ -574,6 +575,157 @@ static void test_byte_locations_and_first_diagnostics(void) {
   TEST_ASSERT_EQUAL(2, error.offset);
 }
 
+/* Concrete pointer failures: escaped separators/NUL, array spelling and atomic capacity. */
+static void check_pointer_path(jb_json_span_t pointer, const char *expected) {
+  jb_json_node_t node, again;
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_pointer_get(&doc, pointer, &node));
+  if (expected != NULL) {
+    jb_json_span_t raw;
+    TEST_ASSERT_EQUAL(HAL_OK, jb_json_raw(node, &raw));
+    TEST_ASSERT_EQUAL(strlen(expected), raw.length);
+    TEST_ASSERT_EQUAL_MEMORY(expected, raw.data, raw.length);
+  }
+  static char buffer[1024];
+  memset(buffer, 0x5a, sizeof(buffer));
+  size_t needed = SIZE_MAX;
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_pointer_copy(node, NULL, 0, &needed));
+  TEST_ASSERT_EQUAL(pointer.length, needed);
+  if (pointer.length != 0) {
+    needed = SIZE_MAX;
+    TEST_ASSERT_EQUAL(HAL_EOVERFLOW,
+                      jb_json_pointer_copy(node, buffer, pointer.length - 1, &needed));
+    TEST_ASSERT_EQUAL(pointer.length, needed);
+    TEST_ASSERT_EACH_EQUAL_UINT8(0x5a, buffer, sizeof(buffer));
+  }
+  TEST_ASSERT_TRUE(pointer.length < sizeof(buffer));
+  needed = SIZE_MAX;
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_pointer_copy(node, buffer, pointer.length, &needed));
+  TEST_ASSERT_EQUAL(pointer.length, needed);
+  if (needed != 0) {
+    TEST_ASSERT_EQUAL_MEMORY(pointer.data, buffer, needed);
+  }
+  TEST_ASSERT_EQUAL_CHAR(0x5a, buffer[needed]);
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_pointer_get(&doc, (jb_json_span_t){buffer, needed}, &again));
+  TEST_ASSERT_EQUAL(node.index, again.index);
+  TEST_ASSERT_EQUAL_PTR(node.doc, again.doc);
+}
+
+static void test_pointer_rfc_paths_and_decoded_names(void) {
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    parse("{\"foo\":[\"bar\",\"baz\"],\"\":0,\"a/b\":1,\"c%d\":2,"
+                          "\"e^f\":3,\"g|h\":4,\"i\\\\j\":5,\"k\\\"l\":6,\" \":7,\"m~n\":8,"
+                          "\"~1\":9,\"01\":10,\"-\":true,\"a\\u0000b\":11,"
+                          "\"\\u00e9\":12,\"e\\u0301\":13,\"\\ud834\\udd1e\":14,"
+                          "\"nested\":{\"\":{\"~\\u002f\":15}},"
+                          "\"many\":[0,1,2,3,4,5,6,7,8,9,10,11],\"mixed\":[{\"x\":[0]},2]}"));
+  static const struct {
+    const char *pointer, *raw;
+  } vectors[] = {{"", NULL},
+                 {"/foo", "[\"bar\",\"baz\"]"},
+                 {"/foo/0", "\"bar\""},
+                 {"/foo/1", "\"baz\""},
+                 {"/", "0"},
+                 {"/a~1b", "1"},
+                 {"/c%d", "2"},
+                 {"/e^f", "3"},
+                 {"/g|h", "4"},
+                 {"/i\\j", "5"},
+                 {"/k\"l", "6"},
+                 {"/ ", "7"},
+                 {"/m~0n", "8"},
+                 {"/~01", "9"},
+                 {"/01", "10"},
+                 {"/-", "true"},
+                 {"/\xc3\xa9", "12"},
+                 {"/e\xcc\x81", "13"},
+                 {"/\xf0\x9d\x84\x9e", "14"},
+                 {"/nested//~0~1", "15"},
+                 {"/many/11", "11"},
+                 {"/mixed/1", "2"},
+                 {"/mixed/0/x/0", "0"}};
+  for (size_t i = 0; i < COUNTOF(vectors); ++i) {
+    check_pointer_path((jb_json_span_t){vectors[i].pointer, strlen(vectors[i].pointer)},
+                       vectors[i].raw);
+  }
+  check_pointer_path((jb_json_span_t){"/a\0b", 4}, "11");
+}
+
+static void test_pointer_rejects_bad_syntax_and_missing_values(void) {
+  TEST_ASSERT_EQUAL(HAL_OK, parse("{\"a\":[0,1]}"));
+  static const struct {
+    const char *pointer;
+    hal_status_t status;
+  } vectors[] = {{"a", HAL_EPROTO},
+                 {"#", HAL_EPROTO},
+                 {"#/a", HAL_EPROTO},
+                 {"/~", HAL_EPROTO},
+                 {"/~2", HAL_EPROTO},
+                 {"/missing/~", HAL_EPROTO},
+                 {"/missing/\xff", HAL_EPROTO},
+                 {"/a/0/~", HAL_EPROTO},
+                 {"/a/01", HAL_EPROTO},
+                 {"/a/+1", HAL_EPROTO},
+                 {"/a/-1", HAL_EPROTO},
+                 {"/a/", HAL_EPROTO},
+                 {"/a/1x", HAL_EPROTO},
+                 {"/a/0.0", HAL_EPROTO},
+                 {"/a/~0", HAL_EPROTO},
+                 {"/a/999999999999999999999999999999x", HAL_EPROTO},
+                 {"/a/2", HAL_ENOENT},
+                 {"/a/-", HAL_ENOENT},
+                 {"/a/4294967296", HAL_ENOENT},
+                 {"/a/18446744073709551616", HAL_ENOENT},
+                 {"/a/999999999999999999999999999999", HAL_ENOENT},
+                 {"/a/0/x", HAL_ETYPE},
+                 {"/missing/0", HAL_ENOENT}};
+  for (size_t i = 0; i < COUNTOF(vectors); ++i) {
+    jb_json_node_t node = {&doc, SIZE_MAX};
+    TEST_ASSERT_EQUAL(
+        vectors[i].status,
+        jb_json_pointer_get(&doc, (jb_json_span_t){vectors[i].pointer, strlen(vectors[i].pointer)},
+                            &node));
+    TEST_ASSERT_EQUAL_PTR(&doc, node.doc);
+    TEST_ASSERT_EQUAL(SIZE_MAX, node.index);
+  }
+  static const char trailing_tilde[] = {'/', '~'};
+  jb_json_node_t node = {&doc, SIZE_MAX};
+  TEST_ASSERT_EQUAL(
+      HAL_EPROTO,
+      jb_json_pointer_get(&doc, (jb_json_span_t){trailing_tilde, sizeof(trailing_tilde)}, &node));
+  TEST_ASSERT_EQUAL_PTR(&doc, node.doc);
+  TEST_ASSERT_EQUAL(SIZE_MAX, node.index);
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_pointer_get(&doc, (jb_json_span_t){NULL, 0}, &node));
+  TEST_ASSERT_EQUAL(0, node.index);
+  TEST_ASSERT_EQUAL(HAL_EINVAL, jb_json_pointer_get(NULL, (jb_json_span_t){NULL, 0}, &node));
+  TEST_ASSERT_EQUAL(HAL_EINVAL, jb_json_pointer_get(&doc, (jb_json_span_t){NULL, 1}, &node));
+  TEST_ASSERT_EQUAL(HAL_EINVAL, jb_json_pointer_get(&doc, (jb_json_span_t){NULL, 0}, NULL));
+  size_t needed = 42;
+  TEST_ASSERT_EQUAL(HAL_EINVAL, jb_json_pointer_copy(root(), NULL, 1, &needed));
+  TEST_ASSERT_EQUAL(HAL_EINVAL, jb_json_pointer_copy(root(), NULL, 0, NULL));
+  TEST_ASSERT_EQUAL(HAL_ESTATE,
+                    jb_json_pointer_copy((jb_json_node_t){&doc, SIZE_MAX}, NULL, 0, &needed));
+  TEST_ASSERT_EQUAL(42, needed);
+  doc.valid = false;
+  TEST_ASSERT_EQUAL(HAL_ESTATE, jb_json_pointer_get(&doc, (jb_json_span_t){NULL, 0}, &node));
+  TEST_ASSERT_EQUAL(HAL_ESTATE, jb_json_pointer_copy((jb_json_node_t){&doc, 0}, NULL, 0, &needed));
+  TEST_ASSERT_EQUAL(42, needed);
+}
+
+static void test_pointer_deep_parents_need_no_recursion(void) {
+  static char input[513], path[512];
+  const size_t depth = 256;
+  for (size_t i = 0; i < depth; ++i) {
+    input[i] = '[';
+    input[sizeof(input) - i - 1] = ']';
+    path[2 * i] = '/';
+    path[2 * i + 1] = '0';
+  }
+  input[depth] = '0';
+  limits.max_depth = depth;
+  TEST_ASSERT_EQUAL(HAL_OK, parse_bytes(input, sizeof(input)));
+  check_pointer_path((jb_json_span_t){path, sizeof(path)}, "0");
+}
+
 static void test_missing_outputs_take_precedence_over_limits(void) {
   limits.max_input_bytes = 0;
   const jb_json_span_t input = {"0", 1};
@@ -610,5 +762,8 @@ int main(void) {
   RUN_TEST(test_required_arguments);
   RUN_TEST(test_byte_locations_and_first_diagnostics);
   RUN_TEST(test_missing_outputs_take_precedence_over_limits);
+  RUN_TEST(test_pointer_rfc_paths_and_decoded_names);
+  RUN_TEST(test_pointer_rejects_bad_syntax_and_missing_values);
+  RUN_TEST(test_pointer_deep_parents_need_no_recursion);
   return UNITY_END();
 }

@@ -50,7 +50,8 @@ See [the API guide](doc/en/api.md) for memory, limits and error handling.
 Optional NFC and character properties use `JHBASE_UNICODE=ON` and
 `jb::unicode`; see [Unicode](doc/en/api.md#unicode).
 Prepare its pinned source checkout with `cmake -P scripts/ensure_utf8proc.cmake`.
-JSON Pointer and JSON Schema remain outside this prototype.
+JSON Pointer reads and writes paths through [json_pointer.h](include/jb/json_pointer.h).
+JSON Schema remains outside this prototype.
 Its public ABI may change before the first integration pin.
 
 License: [JaszczurHAL Attribution License (MIT-based)](LICENSE).

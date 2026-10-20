@@ -108,8 +108,35 @@ hal_status_t jb_json_scalar(jb_json_span_t input, size_t *position, uint32_t *ou
   return HAL_OK;
 }
 
-hal_status_t jb_json_strings_equal(jb_json_span_t left, jb_json_span_t right, bool right_escaped,
-                                   size_t max_work, size_t *used, bool *out) {
+hal_status_t jb_json_text_scalar(jb_json_span_t input, size_t *position, jb_json_text_t encoding,
+                                 uint32_t *out) {
+  if (encoding == JB_JSON_TEXT_JSON) {
+    return jb_json_scalar(input, position, out, NULL);
+  }
+  if (encoding == JB_JSON_TEXT_POINTER && input.data[*position] == '~') {
+    if (input.length - *position < 2) {
+      return HAL_EPROTO;
+    }
+    const char escaped = input.data[*position + 1];
+    if (escaped != '0' && escaped != '1') {
+      return HAL_EPROTO;
+    }
+    *out = escaped == '0' ? '~' : '/';
+    *position += 2;
+    return HAL_OK;
+  }
+  size_t consumed;
+  const hal_status_t status =
+      jb_utf8_decode(input.data + *position, input.length - *position, out, &consumed);
+  if (status == HAL_OK) {
+    *position += consumed;
+  }
+  return status;
+}
+
+hal_status_t jb_json_strings_equal(jb_json_span_t left, jb_json_span_t right,
+                                   jb_json_text_t encoding, size_t max_work, size_t *used,
+                                   bool *out) {
   size_t a = 0, b = 0;
   if (*used == max_work) {
     return HAL_EOVERFLOW;
@@ -122,15 +149,7 @@ hal_status_t jb_json_strings_equal(jb_json_span_t left, jb_json_span_t right, bo
     if (status != HAL_OK) {
       return status;
     }
-    if (right_escaped) {
-      status = jb_json_scalar(right, &b, &cb, NULL);
-    } else {
-      size_t consumed;
-      status = jb_utf8_decode(right.data + b, right.length - b, &cb, &consumed);
-      if (status == HAL_OK) {
-        b += consumed;
-      }
-    }
+    status = jb_json_text_scalar(right, &b, encoding, &cb);
     if (status != HAL_OK) {
       return status;
     }

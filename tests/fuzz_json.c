@@ -1,4 +1,5 @@
 #include "jb/json.h"
+#include "jb/json_pointer.h"
 #include "jb/utf8.h"
 #include <jb/array.h>
 #include <stdlib.h>
@@ -40,6 +41,19 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
   if (parsed == HAL_OK) {
     if (measured != HAL_OK || needed.node_count != doc.token_count || !doc.valid) {
       abort();
+    }
+    const jb_json_node_t selected = {&doc, size % doc.token_count};
+    jb_json_node_t located;
+    size_t pointer_bytes;
+    if (jb_json_pointer_copy(selected, NULL, 0, &pointer_bytes) != HAL_OK) {
+      abort();
+    }
+    if (pointer_bytes <= sizeof(output)) {
+      if (jb_json_pointer_copy(selected, output, sizeof(output), &pointer_bytes) != HAL_OK ||
+          jb_json_pointer_get(&doc, (jb_json_span_t){output, pointer_bytes}, &located) != HAL_OK ||
+          located.doc != &doc || located.index != selected.index) {
+        abort();
+      }
     }
     for (size_t i = 0; i < doc.token_count; ++i) {
       const jb_json_token_t *token = &tokens[i];

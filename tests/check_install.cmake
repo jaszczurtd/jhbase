@@ -80,7 +80,7 @@ function(consumer name prefix library)
   set(dir "${JB_WORK}/${name}")
   set(code "#include <jb/array.h>\n#include <jb/status.h>\n")
   if(library)
-    string(APPEND code "#include <jb/utf8.h>\n")
+    string(APPEND code "#include <jb/utf8.h>\n#include <jb/json_pointer.h>\n")
     if(JB_UNICODE)
       string(APPEND code "#include <jb/unicode.h>\n")
     endif()
@@ -90,6 +90,15 @@ function(consumer name prefix library)
   if(library)
     string(APPEND code "  size_t bad = 0;\n"
       "  if (status == HAL_OK) status = jb_utf8_validate(text, 2u, &bad);\n")
+    string(APPEND code "  const jb_json_span_t input = {\"true\", 4u}, path = {0, 0};\n"
+      "  const jb_json_limits_t limits = {4u, 1u, 0u, 0u, 0u, 0u, 0u};\n"
+      "  const jb_json_workspace_t scratch = {0, 0};\n"
+      "  jb_json_token_t tokens[1];\n  jb_json_doc_t doc;\n  jb_json_node_t node;\n"
+      "  size_t required = 1u;\n"
+      "  if (status == HAL_OK) status = jb_json_parse(input, &limits, tokens, 1u, scratch, &doc, 0);\n"
+      "  if (status == HAL_OK) status = jb_json_pointer_get(&doc, path, &node);\n"
+      "  if (status == HAL_OK) status = jb_json_pointer_copy(node, 0, 0u, &required);\n"
+      "  if (status == HAL_OK && required != 0u) return 3;\n")
     if(JB_UNICODE)
       string(APPEND code "  int32_t work[4];\n  const char *normalized = 0;\n  size_t length = 0;\n"
         "  if (status == HAL_OK) status = jb_unicode_nfc(\"abc\", 3u, work, 4u, 100u, &normalized, &length);\n"

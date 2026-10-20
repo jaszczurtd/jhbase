@@ -157,7 +157,7 @@ static hal_status_t unique_key(parser_t *p, const parse_frame_t *parent) {
     const jb_json_span_t prior = {p->input.data + old->key_offset, old->key_length};
     bool equal;
     const hal_status_t status = jb_json_strings_equal(
-        prior, key, true, p->limits->max_key_compare_bytes, &p->compared, &equal);
+        prior, key, JB_JSON_TEXT_JSON, p->limits->max_key_compare_bytes, &p->compared, &equal);
     if (status != HAL_OK) {
       return limit(p, parent->key_offset - 1);
     }

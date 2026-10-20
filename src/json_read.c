@@ -1,6 +1,6 @@
 #include "json_internal.h"
 
-static hal_status_t record(jb_json_node_t node, const jb_json_token_t **out) {
+hal_status_t jb_json_record(jb_json_node_t node, const jb_json_token_t **out) {
   if (node.doc == NULL || !node.doc->valid || node.doc->tokens == NULL ||
       node.index >= node.doc->token_count) {
     return HAL_ESTATE;
@@ -15,7 +15,7 @@ hal_status_t jb_json_root(const jb_json_doc_t *doc, jb_json_node_t *out) {
   }
   const jb_json_node_t root = {doc, 0};
   const jb_json_token_t *token;
-  const hal_status_t status = record(root, &token);
+  const hal_status_t status = jb_json_record(root, &token);
   if (status == HAL_OK) {
     *out = root;
   }
@@ -27,7 +27,7 @@ hal_status_t jb_json_type(jb_json_node_t node, jb_json_type_t *out) {
     return HAL_EINVAL;
   }
   const jb_json_token_t *token;
-  const hal_status_t status = record(node, &token);
+  const hal_status_t status = jb_json_record(node, &token);
   if (status == HAL_OK) {
     *out = token->type;
   }
@@ -39,7 +39,7 @@ hal_status_t jb_json_count(jb_json_node_t node, size_t *out) {
     return HAL_EINVAL;
   }
   const jb_json_token_t *token;
-  const hal_status_t status = record(node, &token);
+  const hal_status_t status = jb_json_record(node, &token);
   if (status != HAL_OK) {
     return status;
   }
@@ -75,16 +75,17 @@ hal_status_t jb_json_next(jb_json_node_t node, jb_json_node_t *out) {
     return HAL_EINVAL;
   }
   const jb_json_token_t *token;
-  const hal_status_t status = record(node, &token);
+  const hal_status_t status = jb_json_record(node, &token);
   return status == HAL_OK ? related(node, token->next_sibling, out) : status;
 }
 
-hal_status_t jb_json_find(jb_json_node_t object, jb_json_span_t key, jb_json_node_t *out) {
+hal_status_t jb_json_find_encoded(jb_json_node_t object, jb_json_span_t key,
+                                  jb_json_text_t encoding, jb_json_node_t *out) {
   if (out == NULL) {
     return HAL_EINVAL;
   }
   const jb_json_token_t *token;
-  hal_status_t status = record(object, &token);
+  hal_status_t status = jb_json_record(object, &token);
   if (status != HAL_OK) {
     return status;
   }
@@ -101,7 +102,7 @@ hal_status_t jb_json_find(jb_json_node_t object, jb_json_span_t key, jb_json_nod
     const jb_json_span_t raw = {object.doc->input.data + member->key_offset, member->key_length};
     bool equal;
     size_t used = 0;
-    status = jb_json_strings_equal(raw, key, false, SIZE_MAX, &used, &equal);
+    status = jb_json_strings_equal(raw, key, encoding, SIZE_MAX, &used, &equal);
     if (status != HAL_OK) {
       return status;
     }
@@ -113,12 +114,16 @@ hal_status_t jb_json_find(jb_json_node_t object, jb_json_span_t key, jb_json_nod
   return HAL_ENOENT;
 }
 
+hal_status_t jb_json_find(jb_json_node_t object, jb_json_span_t key, jb_json_node_t *out) {
+  return jb_json_find_encoded(object, key, JB_JSON_TEXT_UTF8, out);
+}
+
 hal_status_t jb_json_at(jb_json_node_t array, size_t position, jb_json_node_t *out) {
   if (out == NULL) {
     return HAL_EINVAL;
   }
   const jb_json_token_t *token;
-  const hal_status_t status = record(array, &token);
+  const hal_status_t status = jb_json_record(array, &token);
   if (status != HAL_OK) {
     return status;
   }
@@ -140,7 +145,7 @@ hal_status_t jb_json_raw(jb_json_node_t node, jb_json_span_t *out) {
     return HAL_EINVAL;
   }
   const jb_json_token_t *token;
-  const hal_status_t status = record(node, &token);
+  const hal_status_t status = jb_json_record(node, &token);
   if (status == HAL_OK) {
     *out = (jb_json_span_t){node.doc->input.data + token->offset, token->length};
   }
@@ -152,7 +157,7 @@ hal_status_t jb_json_number_token(jb_json_node_t node, jb_json_span_t *out) {
     return HAL_EINVAL;
   }
   const jb_json_token_t *token;
-  const hal_status_t status = record(node, &token);
+  const hal_status_t status = jb_json_record(node, &token);
   if (status != HAL_OK) {
     return status;
   }
@@ -164,7 +169,7 @@ hal_status_t jb_json_get_bool(jb_json_node_t node, bool *out) {
     return HAL_EINVAL;
   }
   const jb_json_token_t *token;
-  const hal_status_t status = record(node, &token);
+  const hal_status_t status = jb_json_record(node, &token);
   if (status != HAL_OK) {
     return status;
   }
@@ -188,7 +193,7 @@ static hal_status_t copy_value(jb_json_node_t node, bool key, bool terminate, ch
     return HAL_EINVAL;
   }
   const jb_json_token_t *token;
-  const hal_status_t status = record(node, &token);
+  const hal_status_t status = jb_json_record(node, &token);
   if (status != HAL_OK) {
     return status;
   }
@@ -219,7 +224,7 @@ hal_status_t jb_json_string_equal(jb_json_node_t node, jb_json_span_t value, boo
     return HAL_EINVAL;
   }
   const jb_json_token_t *token;
-  hal_status_t status = record(node, &token);
+  hal_status_t status = jb_json_record(node, &token);
   if (status != HAL_OK) {
     return status;
   }
@@ -231,6 +236,6 @@ hal_status_t jb_json_string_equal(jb_json_node_t node, jb_json_span_t value, boo
     return status;
   }
   size_t used = 0;
-  return jb_json_strings_equal(encoded_text(node.doc, token, false), value, false, SIZE_MAX, &used,
-                               out);
+  return jb_json_strings_equal(encoded_text(node.doc, token, false), value, JB_JSON_TEXT_UTF8,
+                               SIZE_MAX, &used, out);
 }
