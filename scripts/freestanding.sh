@@ -40,9 +40,13 @@ jb_profile_compile() {
   JB_PROFILE_COMMON=(-std=c11 -O2 -ffreestanding -fno-builtin -fstrict-aliasing
     -fstack-usage -ffunction-sections -fdata-sections
     "-I${JB_ROOT}/include" "-I${JB_ROOT}/third_party/ryu")
+  if [[ "${3:-}" == unicode ]]; then
+    JB_PROFILE_COMMON+=(-DJB_TEST_UNICODE -DUTF8PROC_STATIC "-I${JB_ROOT}/third_party/utf8proc")
+  fi
   JB_PROFILE_WARNINGS=(-Wall -Wextra -Werror -Wpedantic -Wconversion -Wshadow -Wvla)
   JB_PROFILE_OWNED=() JB_PROFILE_OBJECTS=()
   for jb_source in "${JB_ROOT}"/src/*.c; do
+    [[ "$(basename "$jb_source")" != unicode.c || "${3:-}" == unicode ]] || continue
     jb_object="${jb_directory}/$(basename "${jb_source%.c}").o"
     "${JB_PROFILE_TOOL}-gcc" "${JB_PROFILE_COMMON[@]}" "${JB_PROFILE_FLAGS[@]}" \
       "${JB_PROFILE_WARNINGS[@]}" -c "$jb_source" -o "$jb_object"
@@ -54,5 +58,11 @@ jb_profile_compile() {
       -DRYU_OPTIMIZE_SIZE -DRYU_ONLY_64_BIT_OPS -c "$jb_source" -o "$jb_object"
     JB_PROFILE_OBJECTS+=("$jb_object")
   done
+  if [[ "${3:-}" == unicode ]]; then
+    jb_object="${jb_directory}/utf8proc.o"
+    "${JB_PROFILE_TOOL}-gcc" "${JB_PROFILE_COMMON[@]}" "${JB_PROFILE_FLAGS[@]}" \
+      -c "${JB_ROOT}/third_party/utf8proc/utf8proc.c" -o "$jb_object"
+    JB_PROFILE_OBJECTS+=("$jb_object")
+  fi
   "${JB_PROFILE_TOOL}-ar" rcs "${jb_directory}/libjhbase.a" "${JB_PROFILE_OBJECTS[@]}"
 }

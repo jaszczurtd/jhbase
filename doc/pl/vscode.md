@@ -26,6 +26,7 @@ tak samo na Linuksie, macOS i Windows: `scripts/vscode_workspace.cmake`.
 | `Ctrl+Shift+1` | `Project: Build` | Konfiguruje i buduje aktywny profil w trybie Release, potem wybiera jego bazę kompilacji. |
 | | `Project: Build (Debug)` | To samo z `CMAKE_BUILD_TYPE=Debug` w osobnym drzewie. |
 | | `Project: Test` | Buduje, potem uruchamia zestawy CTest aktywnego profilu. |
+| | `Project: Install library` | Buduje i instaluje aktywny profil w `.build/install/<profile>/<config>`. |
 | `Ctrl+Shift+6` | `Project: Refresh IntelliSense` | Buduje, potem generuje na nowo `.vscode/c_cpp_properties.json`. |
 | `Ctrl+Shift+7` | `Project: Clean` | Usuwa drzewa budowania aktywnego profilu i wygenerowany plik IntelliSense; inne profile i narzędzia zostają. |
 | `Ctrl+Shift+9` | `Project: Config Dump` | Wypisuje aktywny profil, generator i ścieżki. |
@@ -38,6 +39,11 @@ Skróty pochodzą z pliku skrótów użytkownika VS Code;
 `.vscode/keybindings.reference.json` wymienia wpisy, tak jak w JaszczurHAL.
 Zadań wgrywania, monitora szeregowego i sondy debugowania tu nie ma: jhbase
 jest biblioteką hostową.
+
+Zadanie `Project: Install library` buduje aktywny profil i instaluje bibliotekę
+w `.build/install/<profile>/<config>`. Wywołane z terminala przez
+`cmake -DJB_ACTION=install -P scripts/vscode_workspace.cmake` przyjmuje inny
+katalog przez `-DJB_INSTALL_PREFIX=/path/to/prefix`.
 
 ## Profile
 

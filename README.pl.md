@@ -48,7 +48,10 @@ i sprawdza drzewo stagowane (whitespace własnych źródeł, manifest Ryu,
 składnia skryptów).
 
 [Opis API](doc/pl/api.md) wyjaśnia obsługę pamięci, limitów i błędów.
-JSON Pointer, JSON Schema i NFC są poza obecnym zakresem.
+Opcjonalne NFC i właściwości znaków włącza `JHBASE_UNICODE=ON` i target
+`jb::unicode`; opisuje je [sekcja Unicode](doc/pl/api.md#unicode).
+Przypięty checkout przygotowuje `cmake -P scripts/ensure_utf8proc.cmake`.
+JSON Pointer i JSON Schema są poza obecnym zakresem.
 Publiczne ABI prototypu może zmienić się przed pierwszą integracją.
 
 Licencja: [JaszczurHAL Attribution License (MIT-based)](LICENSE).

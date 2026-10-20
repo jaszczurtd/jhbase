@@ -37,6 +37,38 @@ writes just the status headers (`abi.h`, `array.h`, `status.h`) and the
 `jb::status` package; `JHBASE_INSTALL_LIBRARY=ON` adds the library and the
 remaining headers.
 
+## Optional Unicode
+
+`JHBASE_UNICODE=ON` builds `jb::unicode`, linking the base library and an
+unmodified utf8proc checkout ignored by Git. The
+[pin](../../third_party/utf8proc_version.conf) records utf8proc 2.12.0 with
+Unicode 18.0.0. Prepare it explicitly with
+`cmake -P scripts/ensure_utf8proc.cmake`; `-DJB_VERIFY_ONLY=ON` checks it
+without downloading or replacing anything. Configure verifies revision,
+origin, clean state and actual source bytes against Git objects, including
+edits hidden by index flags. The
+[upstream license](https://github.com/JuliaStrings/utf8proc/blob/79cdd5ab40c79afa559f689ffc13b76812dee1ac/LICENSE.md) is MIT for code,
+Unicode-DFS-2015 for the tables.
+
+Tests also need the independent normalization corpus and its Unicode-3.0
+license. Their [pin](../../third_party/unicode_test_version.conf) records
+download URLs and SHA-256 sums; the Unicode version comes from the utf8proc
+pin. The license URL uses a full commit in the official ICU repository;
+the complete upstream file retains the Unicode notice and additional ICU
+notices. Pin validation rejects URLs without a full commit.
+`cmake -P scripts/ensure_unicode_test.cmake` prepares them in the ignored
+`tests/fixtures/unicode` directory. `-DJB_VERIFY_ONLY=ON` checks them offline.
+Configure verifies the actual file hashes; the staged hook validates only
+the pin and needs no downloaded data. The Windows test bundle includes the
+verified files.
+
+The wrapper uses buffered operations with explicit lengths. Allocating
+upstream functions stay unmodified and section GC removes them. Linked
+normalization still needs the Unicode tables in flash; avoiding heap does
+not remove that cost. The default build leaves the module out. A full
+install with Unicode enabled exports `jb::unicode` and ships its license.
+Scratch ownership and work limits are described in [the API](api.md#unicode).
+
 ## Buffered Ryu output
 
 The unmodified subset in [third_party/ryu](../../third_party/ryu/version.json)

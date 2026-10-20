@@ -26,6 +26,7 @@ same on Linux, macOS and Windows: `scripts/vscode_workspace.cmake`.
 | `Ctrl+Shift+1` | `Project: Build` | Configure and build the active profile in Release, then select its compile database. |
 | | `Project: Build (Debug)` | The same with `CMAKE_BUILD_TYPE=Debug` in a separate tree. |
 | | `Project: Test` | Build, then run the CTest suites of the active profile. |
+| | `Project: Install library` | Build and install the active profile into `.build/install/<profile>/<config>`. |
 | `Ctrl+Shift+6` | `Project: Refresh IntelliSense` | Build, then regenerate `.vscode/c_cpp_properties.json`. |
 | `Ctrl+Shift+7` | `Project: Clean` | Remove the build trees of the active profile and the generated IntelliSense file; other profiles and tools stay. |
 | `Ctrl+Shift+9` | `Project: Config Dump` | Print the active profile, generator and paths. |
@@ -38,6 +39,9 @@ Shortcuts come from the user keybindings file of VS Code;
 `.vscode/keybindings.reference.json` lists the entries, as in JaszczurHAL.
 Upload, serial monitor and debug-probe tasks do not exist here: jhbase is a
 host library.
+
+The install action accepts `-DJB_INSTALL_PREFIX=/path/to/prefix` when called
+from a terminal with `cmake -DJB_ACTION=install -P scripts/vscode_workspace.cmake`.
 
 ## Profiles
 

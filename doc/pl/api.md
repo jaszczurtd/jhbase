@@ -7,8 +7,8 @@ z pamięci wywołującego. Operacje tekstowe deklaruje
 Oba nagłówki można również dołączać z C++17.
 
 Dokładne konwersje i literały C opisuje [moduł liczb](numbers.md),
-a zapis sekwencyjny - [writer](writer.md). JSON Pointer, JSON Schema i NFC
-pozostają poza obecnym zakresem. Sposób kompilacji i ograniczenia platform
+a zapis sekwencyjny - [writer](writer.md). JSON Pointer i JSON Schema
+pozostają poza obecnym zakresem. Opcjonalne NFC opisano niżej. Sposób kompilacji i ograniczenia platform
 opisano w [dokumencie o testach](testing.md).
 
 ## Wspólne zasady
@@ -21,7 +21,8 @@ długości zamiast `strlen()`.
 Wskaźniki wynikowe są wymagane, o ile opis nie mówi inaczej. Zwykłe wyjścia
 pozostają bez zmian przy błędzie. Wyjątki to unieważnienie dokumentu przez
 parser, diagnostyka i wymagane rozmiary podawane przez funkcje kopiowania
-oraz enkoder. Wejście, tokeny, scratch i bufory wynikowe nie mogą się nakładać.
+oraz enkoder. NFC ustawia poprawne wyjścia na NULL/zero przy błędzie.
+Wejście, tokeny, scratch i bufory wynikowe nie mogą się nakładać.
 
 Niezależne instancje nie współdzielą modyfikowanego stanu. Można równolegle
 czytać niemodyfikowalny dokument, jeśli jego wejście, tokeny i sam obiekt
@@ -121,6 +122,49 @@ hal_status_t example_first_scalar(const char *text, size_t length,
     return jb_utf8_encode(scalar, output, capacity, output_length);
 }
 ```
+
+## Unicode
+
+Ustaw `-DJHBASE_UNICODE=ON`, dołącz [unicode.h](../../include/jb/unicode.h)
+i linkuj `jb::unicode`. `jb_unicode_version()` zwraca należący do biblioteki
+tekst z wersją danych Unicode. Parser JSON nie włącza normalizacji
+automatycznie, a target podstawowy nie linkuje tabel Unicode.
+
+```c
+hal_status_t jb_unicode_nfc_measure(const char *input, size_t length,
+                                   size_t max_work, size_t *required);
+hal_status_t jb_unicode_nfc(const char *input, size_t length, int32_t *scratch,
+                           size_t capacity, size_t max_work,
+                           const char **out_text, size_t *out_length);
+```
+
+Podawaj dokładną liczbę bajtów UTF-8, także przy wewnętrznym NUL. Najpierw
+wyznacz miejsce: `required` liczy elementy `int32_t`, z miejscem na terminator,
+i wynosi co najmniej jeden nawet dla pustego wejścia. Przekaż prawdziwą,
+naturalnie wyrównaną tablicę `int32_t`, oddzielną od wejścia. Nie ma alokacji.
+Wynik zajmuje scratch jako bajty UTF-8 z dodatkowym NUL; `out_length` nie
+liczy tego bajtu. Odczytuj go tylko przez zwrócony wskaźnik znakowy i skopiuj
+przed ponownym użyciem scratch. Kolejne wywołanie ponownie inicjalizuje
+elementy jako `int32_t`. Wejście, scratch i obiekty wynikowe nie mogą się nakładać.
+
+`max_work` ogranicza `length + n + n*n`, gdzie `n` to liczba znaków po
+dekompozycji. To zachowawcze oszacowanie ogranicza porządkowanie znaków
+łączących przed wywołaniem upstream; nie jest timeoutem. `HAL_EOVERFLOW`
+oznacza limit pracy, pojemności lub rozmiaru; `HAL_EPROTO` błędne UTF-8;
+`HAL_EINVAL` błędne wskaźniki, wyrównanie lub nakładanie wejścia i scratch;
+`HAL_EINTERNAL` nieoczekiwany błąd upstream. Pomiar zachowuje wynik przy
+błędzie. Normalizacja ustawia poprawne wyjścia na NULL/zero; błąd unieważnia
+wynik i może pozostawić zmieniony scratch. NFC zachowuje wielkość liter
+i znaki, które zmieniłaby dopiero normalizacja zgodnościowa.
+
+`jb_unicode_properties(scalar, &properties)` zwraca `printable` i `whitespace`
+według przypiętych kategorii i klas kierunku pisma. Reguły odpowiadają
+`isprintable()` i `isspace()` Pythona dla tych danych: spacja ASCII jest
+drukowalna, pozostałe separatory, znaki sterujące, nieprzypisane i prywatnego
+użytku nie są. Błędny znak lub brak wyniku daje `HAL_EINVAL` bez zmiany
+wyniku. Nowsze dane Unicode mogą zmienić ocenę wcześniej nieprzypisanych
+znaków. Piny, licencje i koszt tabel opisuje dokument o
+[zależnościach](dependencies.md#opcjonalne-unicode).
 
 ## Parsowanie
 

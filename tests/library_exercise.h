@@ -4,9 +4,23 @@
 #include "jb/json_writer.h"
 #include "jb/literal.h"
 #include <jb/array.h>
+#ifdef JB_TEST_UNICODE
+#include "jb/unicode.h"
+#endif
 
 /* Shared by the freestanding linker probe and the host allocation guard. */
 static inline int library_exercise(void) {
+#ifdef JB_TEST_UNICODE
+  static int32_t unicode_work[8];
+  const char *normalized = NULL;
+  size_t normalized_length = 0;
+  if (jb_unicode_nfc("e\xcc\x81", 3, unicode_work, COUNTOF(unicode_work), 100, &normalized,
+                     &normalized_length) != HAL_OK ||
+      normalized_length != 2 || (unsigned char)normalized[0] != 0xc3 ||
+      (unsigned char)normalized[1] != 0xa9) {
+    return 8;
+  }
+#endif
   static const char input[] = "{\"id\":18446744073709551615,\"gain\":0.22,\"unit\":\"V\"}";
   static jb_json_token_t tokens[4];
   static unsigned char parsing[256], numbers[4096], writing[512];

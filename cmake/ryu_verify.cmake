@@ -1,15 +1,4 @@
 # The vendored Ryu subset must match its SHA-256 manifest byte for byte. Used by
 # configure through dependencies.cmake and by the pre-commit hook on its own.
 include("${CMAKE_CURRENT_LIST_DIR}/require_hash.cmake")
-set(jb_ryu_root "${CMAKE_CURRENT_LIST_DIR}/../third_party/ryu")
-file(STRINGS "${jb_ryu_root}/SHA256SUMS" jb_ryu_hashes)
-list(LENGTH jb_ryu_hashes jb_ryu_file_count)
-if(NOT jb_ryu_file_count EQUAL 10)
-  message(FATAL_ERROR "Incomplete Ryu source/license manifest")
-endif()
-foreach(entry IN LISTS jb_ryu_hashes)
-  if(NOT entry MATCHES "^([0-9a-f]+)  (.+)$")
-    message(FATAL_ERROR "Invalid Ryu hash manifest entry")
-  endif()
-  jb_require_hash("${jb_ryu_root}/${CMAKE_MATCH_2}" "${CMAKE_MATCH_1}")
-endforeach()
+jb_require_manifest("${CMAKE_CURRENT_LIST_DIR}/../third_party/ryu" 10)

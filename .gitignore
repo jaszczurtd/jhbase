@@ -1,4 +1,8 @@
 .build/
+/third_party/utf8proc/
+/third_party/utf8proc.staging/
+/tests/fixtures/unicode/
+/tests/fixtures/unicode.staging/
 NOW.md
 evidence/
 /AGENTS.md

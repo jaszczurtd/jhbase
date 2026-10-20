@@ -1,4 +1,5 @@
 #include "jb/literal.h"
+#include "test_file.h"
 #include "test_support.h"
 #include <inttypes.h>
 #include <stdio.h>
@@ -9,14 +10,6 @@ static unsigned char parse_scratch[65537], number_scratch[65537];
 static jb_json_doc_t fixture_doc;
 static test_document_t scalar;
 static const char *fixture_path;
-static FILE *open_fixture(const char *path, const char *mode) {
-#ifdef _MSC_VER
-  FILE *file = NULL;
-  return fopen_s(&file, path, mode) == 0 ? file : NULL;
-#else
-  return fopen(path, mode);
-#endif
-}
 static jb_json_workspace_t work(void) {
   return (jb_json_workspace_t){number_scratch + 1, sizeof(number_scratch) - 1};
 }
@@ -43,7 +36,7 @@ static jb_c_literal_type_t selector(const char *name) {
   return (jb_c_literal_type_t)i;
 }
 static jb_json_node_t cases(void) {
-  FILE *file = open_fixture(fixture_path, "rb");
+  FILE *file = jb_test_file_open(fixture_path, "rb");
   TEST_ASSERT_NOT_NULL(file);
   const size_t n = fread(fixture, 1, sizeof(fixture), file);
   const int error = ferror(file);
@@ -165,7 +158,7 @@ static void test_literal_errors_and_transactional_output(void) {
   TEST_ASSERT_EQUAL(HAL_EINVAL, jb_c_literal(node, JB_C_U64, work(), 1000000, NULL, 1, &length));
 }
 static int emit_probe(const char *path) {
-  FILE *file = open_fixture(path, "wb");
+  FILE *file = jb_test_file_open(path, "wb");
   if (file == NULL) {
     return 2;
   }

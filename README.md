@@ -47,7 +47,10 @@ Conventional Commits subject (`type(scope): subject`, at most 100 characters);
 staged tree (owned-source whitespace, the Ryu manifest, shell syntax).
 
 See [the API guide](doc/en/api.md) for memory, limits and error handling.
-JSON Pointer, JSON Schema and NFC remain outside this prototype.
+Optional NFC and character properties use `JHBASE_UNICODE=ON` and
+`jb::unicode`; see [Unicode](doc/en/api.md#unicode).
+Prepare its pinned source checkout with `cmake -P scripts/ensure_utf8proc.cmake`.
+JSON Pointer and JSON Schema remain outside this prototype.
 Its public ABI may change before the first integration pin.
 
 License: [JaszczurHAL Attribution License (MIT-based)](LICENSE).

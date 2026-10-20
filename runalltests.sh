@@ -42,6 +42,16 @@ if [[ -n "$JB_COMMIT" ]]; then
   rmdir "$JB_CHECKOUT"
   git -C "$JB_ROOT" worktree add --detach "$JB_CHECKOUT" "$JB_REVISION"
   trap 'git -C "$JB_ROOT" worktree remove --force "$JB_CHECKOUT"' EXIT
+  if [[ -f "${JB_CHECKOUT}/third_party/utf8proc_version.conf" && -d "${JB_ROOT}/third_party/utf8proc/.git" ]]; then
+    mkdir -p "${JB_CHECKOUT}/third_party/utf8proc"
+    cp -a "${JB_ROOT}/third_party/utf8proc/." "${JB_CHECKOUT}/third_party/utf8proc/"
+    cmake -DJB_VERIFY_ONLY=ON -P "${JB_CHECKOUT}/scripts/ensure_utf8proc.cmake"
+  fi
+  if [[ -f "${JB_CHECKOUT}/third_party/unicode_test_version.conf" && -d "${JB_ROOT}/tests/fixtures/unicode" ]]; then
+    mkdir -p "${JB_CHECKOUT}/tests/fixtures"
+    cp -a "${JB_ROOT}/tests/fixtures/unicode" "${JB_CHECKOUT}/tests/fixtures/unicode"
+    cmake -DJB_VERIFY_ONLY=ON -P "${JB_CHECKOUT}/scripts/ensure_unicode_test.cmake"
+  fi
   JB_ARGS=(--hal-root "$JB_HAL" -j "$JB_JOBS")
   [[ -z "$JB_STAGE" ]] || JB_ARGS+=(--stage "$JB_STAGE")
   JHBASE_TOOLS_ROOT="$JB_TOOLS" \
@@ -63,10 +73,11 @@ fi
 jb_tools_needed=()
 for jb_name in "${JB_STAGES[@]}"; do
   case "$jb_name" in
-    host | sanitizers | memcheck) jb_stage_tools=(unity) ;;
-    clean) jb_stage_tools=(unity cmake-minimum) ;;
-    freestanding) jb_stage_tools=(riscv-toolchain xtensa-toolchain) ;;
-    analysis) jb_stage_tools=(cppcheck) ;;
+    host | sanitizers | memcheck) jb_stage_tools=(unity utf8proc unicode-test) ;;
+    clean) jb_stage_tools=(unity cmake-minimum utf8proc unicode-test) ;;
+    freestanding) jb_stage_tools=(riscv-toolchain xtensa-toolchain utf8proc) ;;
+    analysis) jb_stage_tools=(cppcheck utf8proc) ;;
+    fuzz) jb_stage_tools=(utf8proc) ;;
     quality) jb_stage_tools=(pmd) ;;
     *) continue ;;
   esac
@@ -93,7 +104,7 @@ configure() {
   local jb_dir="$1"; shift
   cmake -S "$JB_ROOT" -B "$jb_dir" -G Ninja \
     "-DJHBASE_HAL_ROOT=${JB_HAL}" "-DJHBASE_UNITY_ROOT=${JB_UNITY}" -DCMAKE_BUILD_TYPE=Release \
-    -DBUILD_TESTING=ON -DJHBASE_LTO=OFF -DJHBASE_SANITIZERS=OFF \
+    -DBUILD_TESTING=ON -DJHBASE_LTO=OFF -DJHBASE_SANITIZERS=OFF -DJHBASE_UNICODE=OFF \
     -DJHBASE_FUZZ=OFF -DJHBASE_COMPARE=OFF \
     -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \
     -DCMAKE_C_FLAGS= -DCMAKE_CXX_FLAGS= "$@"
@@ -104,10 +115,13 @@ host() {
   configure "${JB_GATE}/host" -DJHBASE_LTO=ON
   ctest --test-dir "${JB_GATE}/host" --output-on-failure \
     --output-junit "${JB_GATE}/host/ctest.xml"
+  configure "${JB_GATE}/unicode" -DJHBASE_LTO=ON -DJHBASE_UNICODE=ON
+  ctest --test-dir "${JB_GATE}/unicode" --output-on-failure \
+    --output-junit "${JB_GATE}/unicode/ctest.xml"
 }
 
 sanitizers() {
-  configure "${JB_GATE}/sanitizers" -DJHBASE_SANITIZERS=ON \
+  configure "${JB_GATE}/sanitizers" -DJHBASE_SANITIZERS=ON -DJHBASE_UNICODE=ON \
     -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18
   ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
     UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
@@ -116,7 +130,7 @@ sanitizers() {
 }
 
 memcheck() {
-  configure "${JB_GATE}/memcheck" -DJHBASE_LTO=ON
+  configure "${JB_GATE}/memcheck" -DJHBASE_LTO=ON -DJHBASE_UNICODE=ON
   for jb_test in test_utf8 test_json test_numbers test_writer test_cxx test_float_format test_allocation \
       test_literal_probe_c test_literal_probe_cpp example_json_numbers_c \
       example_json_numbers_cpp example_json_writer_c example_json_writer_cpp \
@@ -130,7 +144,7 @@ memcheck() {
 }
 
 fuzz() {
-  configure "${JB_GATE}/fuzz" -DBUILD_TESTING=OFF -DJHBASE_FUZZ=ON \
+  configure "${JB_GATE}/fuzz" -DBUILD_TESTING=OFF -DJHBASE_FUZZ=ON -DJHBASE_UNICODE=ON \
     -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18
   for jb_fuzzer in json numbers writer; do
     mkdir -p "${JB_GATE}/fuzz/${jb_fuzzer}/corpus" "${JB_GATE}/fuzz/${jb_fuzzer}/artifacts"
@@ -143,8 +157,8 @@ fuzz() {
 }
 
 freestanding_profile() {
-  local jb_name="$1" jb_directory="${JB_GATE}/arm/$1"
-  jb_profile_compile "$jb_name" "$jb_directory"
+  local jb_name="$1" jb_directory="${JB_GATE}/arm/$1${2:+-unicode}"
+  jb_profile_compile "$jb_name" "$jb_directory" "${2:-}"
   "${JB_PROFILE_TOOL}-gcc" "${JB_PROFILE_COMMON[@]}" "${JB_PROFILE_FLAGS[@]}" \
     "${JB_PROFILE_WARNINGS[@]}" -c "${JB_ROOT}/tests/link_probe.c" \
     -o "${jb_directory}/link_probe.o"
@@ -169,6 +183,7 @@ freestanding_profile() {
 freestanding() {
   for jb_name in "${JB_PROFILES[@]}"; do
     freestanding_profile "$jb_name"
+    freestanding_profile "$jb_name" unicode
   done
 }
 
@@ -199,7 +214,7 @@ clean() {
     --exclude=./NOW.md -cf - . | tar -C "$jb_copy" -xf -
   "${jb_cmake}/cmake" -S "$jb_copy" -B "${jb_copy}/.build/host" -G Ninja \
     "-DJHBASE_HAL_ROOT=${JB_HAL}" "-DJHBASE_UNITY_ROOT=${JB_UNITY}" \
-    -DCMAKE_BUILD_TYPE=Release -DJHBASE_LTO=ON \
+    -DCMAKE_BUILD_TYPE=Release -DJHBASE_LTO=ON -DJHBASE_UNICODE=ON \
     -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \
     -DCMAKE_C_FLAGS= -DCMAKE_CXX_FLAGS=
   "${jb_cmake}/cmake" --build "${jb_copy}/.build/host" -j "$JB_JOBS"
@@ -214,6 +229,7 @@ analysis() {
     --enable=warning,style,performance,portability --error-exitcode=1 \
     --std=c11 --language=c \
     "-I${JB_ROOT}/include" "-I${JB_ROOT}/third_party/ryu" \
+    "-I${JB_ROOT}/third_party/utf8proc" -DUTF8PROC_STATIC \
     "${JB_ROOT}/src"
 }
 

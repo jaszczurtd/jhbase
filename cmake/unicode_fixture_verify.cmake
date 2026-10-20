@@ -1,0 +1,5 @@
+include("${CMAKE_CURRENT_LIST_DIR}/unicode_fixture.cmake")
+jb_check_unicode_fixture("${CMAKE_CURRENT_LIST_DIR}/../tests/fixtures/unicode" jb_unicode_test_error)
+if(NOT jb_unicode_test_error STREQUAL "")
+  message(FATAL_ERROR "${jb_unicode_test_error}. Run cmake -P scripts/ensure_unicode_test.cmake")
+endif()

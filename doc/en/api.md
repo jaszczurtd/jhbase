@@ -7,7 +7,7 @@ storage. Include [utf8.h](../../include/jb/utf8.h) for text operations and
 
 For exact conversions and C literals, see [numbers](numbers.md).
 For sequential output, see [the writer](writer.md). JSON Pointer, JSON Schema
-and NFC remain outside this prototype. Build instructions and platform limits
+remain outside this prototype. Optional NFC is described below. Build instructions and platform limits
 are in [the test guide](testing.md).
 
 ## Common rules
@@ -18,7 +18,8 @@ JSON strings can contain U+0000; use their lengths rather than `strlen()`.
 
 Result pointers are required unless marked optional. Ordinary outputs remain
 unchanged on failure. Exceptions are parser document invalidation, diagnostics
-and required sizes reported by copy/encode functions. Do not overlap input,
+and required sizes reported by copy/encode functions. NFC resets its valid
+outputs to NULL/zero on failure. Do not overlap input,
 token storage, scratch or result buffers.
 
 Independent instances share no mutable state. Concurrent reads of an immutable
@@ -118,6 +119,48 @@ hal_status_t example_first_scalar(const char *text, size_t length,
     return jb_utf8_encode(scalar, output, capacity, output_length);
 }
 ```
+
+## Unicode
+
+Build with `-DJHBASE_UNICODE=ON`, include [unicode.h](../../include/jb/unicode.h)
+and link `jb::unicode`. `jb_unicode_version()` returns the library-owned
+Unicode data version string. JSON parsing never enables normalization
+implicitly; the base target does not link the Unicode tables.
+
+```c
+hal_status_t jb_unicode_nfc_measure(const char *input, size_t length,
+                                   size_t max_work, size_t *required);
+hal_status_t jb_unicode_nfc(const char *input, size_t length, int32_t *scratch,
+                           size_t capacity, size_t max_work,
+                           const char **out_text, size_t *out_length);
+```
+
+Input uses exact UTF-8 byte lengths, including embedded NUL. Measure first:
+`required` counts `int32_t` elements, with terminator space, and is at least
+one even for empty input. Supply an actual, naturally aligned `int32_t`
+array separate from input. No memory is allocated. The result occupies
+scratch as UTF-8 bytes with an extra NUL; `out_length` excludes that byte.
+Read it only through the returned character pointer and copy it before
+reusing scratch. The next call initializes its elements as `int32_t` again.
+Input, scratch and result objects must not overlap.
+
+`max_work` bounds `length + n + n*n`, where `n` is the decomposed scalar
+count. This conservative estimate limits combining-mark reordering before
+upstream runs; it is not a deadline. `HAL_EOVERFLOW` reports work, capacity
+or size limits; `HAL_EPROTO` invalid UTF-8; `HAL_EINVAL` invalid pointers,
+alignment or input/scratch overlap; `HAL_EINTERNAL` an unexpected upstream
+failure. Measurement preserves its result on error. Normalization resets
+valid outputs to NULL/zero; errors invalidate the result and may leave
+scratch changed. NFC preserves case and compatibility-only characters.
+
+`jb_unicode_properties(scalar, &properties)` returns `printable` and
+`whitespace`, using the pinned categories and bidirectional classes. The
+rules match Python's `isprintable()` and `isspace()` for those data:
+ASCII space is printable; other separators, controls, unassigned and
+private-use characters are not. Invalid scalars or a missing result return
+`HAL_EINVAL` without changing the result. New Unicode data can change the
+classification of previously unassigned characters. See
+[dependencies](dependencies.md#optional-unicode) for pins, licenses and table cost.
 
 ## Parsing
 

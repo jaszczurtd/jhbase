@@ -47,6 +47,21 @@ printf '\n/* local edit */\n' >> "$repo/third_party/ryu/ryu/common.h"
 git -C "$repo" add third_party/ryu/ryu/common.h
 ! commit "fix(ryu): local edit" || fail "a modified vendored Ryu file was accepted"
 grep -q "Commit blocked" "$work/commit.log" || fail "the refusal did not name the staged-tree check"
-git -C "$repo" checkout -q -- third_party/ryu/ryu/common.h
+git -C "$repo" checkout -q HEAD -- third_party/ryu/ryu/common.h
 git -C "$repo" reset -q
+# Downloaded data must not enter a normal commit alongside its pin.
+mkdir -p "$repo/tests/fixtures/unicode"
+for file in NormalizationTest.txt LICENSE.txt; do
+  printf 'downloaded data\n' > "$repo/tests/fixtures/unicode/$file"
+  git -C "$repo" add -A
+  if git -C "$repo" ls-files --error-unmatch "tests/fixtures/unicode/$file" >/dev/null 2>&1; then
+    fail "downloaded Unicode data would enter the commit"
+  fi
+done
+# The staged snapshot validates the pin without downloading the data.
+sed -i 's/^UNICODE_TEST_NORMALIZATION_SHA256=.*/UNICODE_TEST_NORMALIZATION_SHA256=00/' \
+  "$repo/third_party/unicode_test_version.conf"
+git -C "$repo" add third_party/unicode_test_version.conf
+! commit "fix(unicode): invalid test pin" || fail "an invalid Unicode data pin was accepted"
+grep -q "Commit blocked" "$work/commit.log" || fail "Unicode refusal bypassed the staged-tree check"
 printf '%s\n' 'check_hooks: PASS (commit-msg rules, normalization, clang-format, staged-tree check)'

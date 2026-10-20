@@ -3,6 +3,9 @@
 #include <jb/array.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef JB_TEST_UNICODE
+#include "jb/unicode.h"
+#endif
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size);
 
@@ -20,6 +23,20 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
   const hal_status_t parsed =
       jb_json_parse(input, &limits, tokens, COUNTOF(tokens), work, &doc, &error);
   (void)jb_utf8_validate(input.data, input.length, NULL);
+#ifdef JB_TEST_UNICODE
+  static int32_t unicode_work[4097], unicode_again[4097];
+  const char *normalized = NULL, *again = NULL;
+  size_t normalized_length = 0, again_length = 0;
+  if (jb_unicode_nfc(input.data, input.length, unicode_work, COUNTOF(unicode_work), 1000000,
+                     &normalized, &normalized_length) == HAL_OK) {
+    if (jb_utf8_validate(normalized, normalized_length, NULL) != HAL_OK ||
+        jb_unicode_nfc(normalized, normalized_length, unicode_again, COUNTOF(unicode_again),
+                       SIZE_MAX, &again, &again_length) != HAL_OK ||
+        normalized_length != again_length || memcmp(normalized, again, again_length) != 0) {
+      abort();
+    }
+  }
+#endif
   if (parsed == HAL_OK) {
     if (measured != HAL_OK || needed.node_count != doc.token_count || !doc.valid) {
       abort();

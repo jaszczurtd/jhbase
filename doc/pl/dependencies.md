@@ -36,6 +36,38 @@ Jego instalacja zapisuje same nagłówki statusów (`abi.h`, `array.h`,
 `status.h`) i pakiet `jb::status`; `JHBASE_INSTALL_LIBRARY=ON` dokłada
 bibliotekę i pozostałe nagłówki.
 
+## Opcjonalne Unicode
+
+`JHBASE_UNICODE=ON` buduje `jb::unicode`, który linkuje bibliotekę podstawową
+i niezmieniony checkout utf8proc, ignorowany przez Git.
+[Pin](../../third_party/utf8proc_version.conf) wskazuje utf8proc 2.12.0
+z Unicode 18.0.0. Przygotuj go jawnie przez
+`cmake -P scripts/ensure_utf8proc.cmake`; `-DJB_VERIFY_ONLY=ON` sprawdza go
+bez pobierania i zastępowania plików. Configure sprawdza rewizję, origin,
+czystość oraz bajty źródeł względem obiektów Git, także przy zmianach
+ukrytych flagami indeksu.
+[Licencja upstream](https://github.com/JuliaStrings/utf8proc/blob/79cdd5ab40c79afa559f689ffc13b76812dee1ac/LICENSE.md) to MIT dla kodu,
+Unicode-DFS-2015 dla tabel.
+
+Testy wymagają też niezależnego zestawu normalizacji i jego licencji
+Unicode-3.0. Ich [pin](../../third_party/unicode_test_version.conf) zapisuje
+adresy pobrania i SHA-256; wersję Unicode pobiera z pinu utf8proc.
+Adres licencji wskazuje pełny commit w oficjalnym repozytorium ICU;
+zachowujemy cały plik upstream z notą Unicode i dodatkowymi notami ICU.
+Walidacja pinu odrzuca adresy bez pełnego commita.
+`cmake -P scripts/ensure_unicode_test.cmake` przygotowuje je w ignorowanym
+katalogu `tests/fixtures/unicode`. `-DJB_VERIFY_ONLY=ON` sprawdza je offline.
+Configure weryfikuje hashe plików; hook dla indeksu sprawdza tylko pin
+i nie potrzebuje pobranych danych. Paczka testowa Windows zawiera
+zweryfikowane pliki.
+
+Adapter używa operacji buforowych z jawnymi długościami. Alokujące funkcje
+upstream pozostają niezmienione i są usuwane przez GC sekcji. Linkowana
+normalizacja nadal wymaga tabel Unicode we flashu; brak heap nie usuwa tego
+kosztu. Domyślny build pomija moduł. Pełna instalacja z włączonym Unicode
+eksportuje `jb::unicode` i dostarcza jego licencję. Zasady pamięci scratch
+i limitów pracy opisuje [API](api.md#unicode).
+
 ## Buforowy zapis Ryu
 
 Niezmieniony podzbiór w [third_party/ryu](../../third_party/ryu/version.json)

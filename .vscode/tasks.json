@@ -106,6 +106,32 @@
             ]
         },
         {
+            "label": "Project: Install library",
+            "detail": "Build and install the active profile in .build/install/<profile>/<config>",
+            "type": "shell",
+            "command": "${config:jhbase.cmake}",
+            "args": [
+                "-DJB_ACTION=install",
+                "-P",
+                "${workspaceFolder}/scripts/vscode_workspace.cmake"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": [
+                "$gcc",
+                "$msCompile"
+            ]
+        },
+        {
             "label": "Project: Refresh IntelliSense",
             "detail": "Ctrl+Shift+6 - build the active profile and regenerate .vscode/c_cpp_properties.json",
             "type": "shell",

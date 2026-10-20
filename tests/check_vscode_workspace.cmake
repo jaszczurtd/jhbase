@@ -250,6 +250,17 @@ require("EXISTS \"${tree}/.build/vscode/host/Debug/compile_commands.json\"" "the
 file(STRINGS "${tree}/.build/vscode/host/Debug/CMakeCache.txt" build_type REGEX "^CMAKE_BUILD_TYPE:")
 require("build_type MATCHES \"=Debug$\"" "the Debug tree is configured as '${build_type}'")
 
+run_driver(output TRUE -DJB_ACTION=install ${forwarded} "-DJB_CMAKE_ARGS=${inner_args}")
+require("EXISTS \"${tree}/.build/install/host/Release/include/jb/status.h\""
+  "install did not publish the active profile's headers")
+require("EXISTS \"${tree}/.build/install/host/Release/lib/cmake/jhbase/jhbaseConfig.cmake\""
+  "install did not publish its CMake package")
+set(custom_prefix "${JB_SCRATCH}/installed with spaces")
+run_driver(output TRUE -DJB_ACTION=install ${forwarded} "-DJB_CMAKE_ARGS=${inner_args}"
+  "-DJB_INSTALL_PREFIX=${custom_prefix}")
+require("EXISTS \"${custom_prefix}/include/jb/utf8.h\""
+  "install ignored a prefix containing spaces")
+
 file(REMOVE "${tree}/.vscode/c_cpp_properties.json")
 run_driver(output TRUE -DJB_ACTION=refresh-intellisense ${forwarded} "-DJB_CMAKE_ARGS=${inner_args}")
 require("EXISTS \"${tree}/.vscode/c_cpp_properties.json\"" "refresh-intellisense wrote no c_cpp_properties.json")
@@ -279,7 +290,7 @@ if(git_program)
 endif()
 
 # Every action the tasks use was exercised above.
-set(exercised select build test refresh-intellisense clean config-dump install-hooks)
+set(exercised select build test install refresh-intellisense clean config-dump install-hooks)
 foreach(action IN LISTS driver_actions)
   require("action IN_LIST exercised" "tasks.json uses the unchecked action '${action}'")
 endforeach()

@@ -8,6 +8,7 @@
 #   select               store the build profile given by JB_PROFILE
 #   build                configure and build the active profile
 #   test                 build, then run CTest in the active profile
+#   install              build, then install the active profile's package
 #   refresh-intellisense build, then rewrite .vscode/c_cpp_properties.json
 #   clean                remove the active profile's build trees and the
 #                        generated IntelliSense file, nothing else
@@ -29,6 +30,7 @@
 #   JB_CMAKE_ARGS   extra configure arguments, one string quoted like a
 #                   command line, e.g. "-DJHBASE_LTO=ON -DX=\"a b\""
 #   JB_CTEST_ARGS   extra CTest arguments, the same form, e.g. "-R ^utf8$"
+#   JB_INSTALL_PREFIX install destination; default .build/install/<profile>/<config>
 #
 # State lives in the ignored .vscode/jhbase.local.json; build trees in
 # .build/vscode/<profile>/<config>/, inside the only build root the project
@@ -282,6 +284,17 @@ elseif(JB_ACTION STREQUAL "test")
     list(APPEND cmd ${extra})
   endif()
   jb_run(${cmd})
+elseif(JB_ACTION STREQUAL "install")
+  jb_active_profile(profile)
+  jb_active_config(config)
+  jb_build("${profile}" "${config}")
+  jb_build_dir("${profile}" "${config}" build_dir)
+  set(prefix "${jb_root}/.build/install/${profile}/${config}")
+  if(DEFINED JB_INSTALL_PREFIX AND NOT JB_INSTALL_PREFIX STREQUAL "")
+    get_filename_component(prefix "${JB_INSTALL_PREFIX}" ABSOLUTE BASE_DIR "${jb_root}")
+  endif()
+  jb_run("${CMAKE_COMMAND}" --install "${build_dir}" --config "${config}" --prefix "${prefix}")
+  message(STATUS "Installed library: ${prefix}")
 elseif(JB_ACTION STREQUAL "clean")
   jb_active_profile(profile)
   # The profile id is validated above, so this path cannot leave .build/vscode.

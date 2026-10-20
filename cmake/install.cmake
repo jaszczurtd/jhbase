@@ -63,4 +63,13 @@ if(JHBASE_INSTALL_LIBRARY)
           ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}" COMPONENT jhbase_library)
   install(EXPORT jhbaseTargets NAMESPACE jb:: DESTINATION "${jb_cmake_dir}"
           COMPONENT jhbase_library)
+  if(JHBASE_UNICODE)
+    install(TARGETS jb_unicode EXPORT jhbaseUnicodeTargets
+            ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}" COMPONENT jhbase_library)
+    install(EXPORT jhbaseUnicodeTargets NAMESPACE jb:: DESTINATION "${jb_cmake_dir}"
+            COMPONENT jhbase_library)
+    install(FILES "${PROJECT_SOURCE_DIR}/third_party/utf8proc/LICENSE.md"
+            DESTINATION "${CMAKE_INSTALL_DATADIR}/jhbase/licenses/utf8proc"
+            COMPONENT jhbase_library)
+  endif()
 endif()

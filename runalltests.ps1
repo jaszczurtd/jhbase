@@ -41,12 +41,15 @@ foreach ($arch in $Architecture) {
         -not (Get-Command cl.exe -CommandType Application -ErrorAction SilentlyContinue)) {
         throw "Cannot initialize MSVC for $arch"
     }
-    $build = Join-Path $PSScriptRoot ".build/msvc-$arch"
-    Invoke-Checked 'cmake' @('-S', $PSScriptRoot, '-B', $build,
-        '-G', 'Visual Studio 17 2022', '-A', $arch, "-DJHBASE_HAL_ROOT=$hal",
-        "-DJHBASE_TOOLS_ROOT=$tools")
-    Invoke-Checked 'cmake' @('--build', $build, '--config', 'Release', '--parallel', "$Jobs")
-    Invoke-Checked 'ctest' @('--test-dir', $build, '-C', 'Release', '--output-on-failure',
-        '--output-junit', (Join-Path $build 'ctest.xml'))
+    foreach ($unicode in @('OFF', 'ON')) {
+        $suffix = if ($unicode -eq 'ON') { '-unicode' } else { '' }
+        $build = Join-Path $PSScriptRoot ".build/msvc-$arch$suffix"
+        Invoke-Checked 'cmake' @('-S', $PSScriptRoot, '-B', $build,
+            '-G', 'Visual Studio 17 2022', '-A', $arch, "-DJHBASE_HAL_ROOT=$hal",
+            "-DJHBASE_TOOLS_ROOT=$tools", "-DJHBASE_UNICODE=$unicode")
+        Invoke-Checked 'cmake' @('--build', $build, '--config', 'Release', '--parallel', "$Jobs")
+        Invoke-Checked 'ctest' @('--test-dir', $build, '-C', 'Release', '--output-on-failure',
+            '--output-junit', (Join-Path $build 'ctest.xml'))
+    }
 }
 Write-Host 'PASS: all requested native MSVC configurations'

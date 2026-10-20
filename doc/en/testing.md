@@ -16,6 +16,13 @@ corpora stay below `.build/gate`; the `clean` stage replaces only its own copy.
 | `analysis` | The cppcheck build pinned by `third_party/cppcheck_version.conf`, checking the portable C modules. |
 | `quality` | Shell syntax, clang-format, source whitespace, PMD CPD over owned production/test/example code, and the git hooks exercised in a scratch repository (`tests/check_hooks.sh`). |
 
+The host stage tests builds with Unicode disabled and enabled. Sanitizers,
+Valgrind, the JSON/UTF-8 fuzzer and the clean build include the NFC wrapper
+and actual utf8proc source. The UTF-8 suite checks the independent pinned
+`NormalizationTest.txt` corpus and the NULL-workspace query regression.
+Freestanding links every profile with and without NFC, checking both for
+allocation symbols. Windows also tests both module settings per architecture.
+
 Required system tools are CMake, Ninja, GCC/G++, Clang/Clang++ 18 with
 libFuzzer, Valgrind, arm-none-eabi GCC/binutils, Java, clang-format, ripgrep,
 curl, unzip, tar and Git. Unity, cppcheck, PMD, the RISC-V and Xtensa
@@ -47,9 +54,11 @@ Linux gate:
 ./runalltests.sh --stage host -j4
 ```
 
-Both preparation scripts download only pinned, verified content below `.build`.
-The gate itself downloads nothing and stops with the repair command when a
-pinned tool is missing. See [parser selection](parser-choice.md).
+Both preparation scripts download only pinned, verified content. Tools and
+comparison sources go below `.build`; utf8proc and Unicode conformance data
+use their ignored source and fixture directories. The gate itself downloads
+nothing and stops with the repair command when a dependency is missing or
+modified. See [dependencies](dependencies.md) and [parser selection](parser-choice.md).
 The `comparison` stage accepts `JHBASE_COMPARISON_ROOT` for an explicit cache.
 
 `--commit [REF]` runs that commit's own runner from a detached clean worktree,
@@ -77,8 +86,8 @@ must stay identical. The standalone numeric/writer examples run in both language
 
 For native x64 and Win32 MSVC, use [the Windows checklist](windows.md) and
 `runalltests.ps1`. It runs the same CTest suites, including layout/packing probes.
-The short-enum compiler-flag probes apply only to GCC/Clang: they reject an
-unselected short status enum and accept the explicit fixed-width selector.
+The short-enum compiler-flag probes apply only to GCC/Clang: the public
+status type must stay 32 bits with `-fshort-enums`, without a selector.
 The GNU linker allocation-guard test is Linux-specific.
 
 Cross compilation and static `.su` reports do not establish on-device timing,

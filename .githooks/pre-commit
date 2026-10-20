@@ -101,6 +101,8 @@ check_staged_tree() {
     cd "$staged_tree" &&
         cmake "-DJB_SOURCE=$staged_tree" -P tests/check_source.cmake &&
         cmake -P cmake/ryu_verify.cmake &&
+        cmake -P cmake/utf8proc_pin.cmake &&
+        cmake -P cmake/unicode_test_pin.cmake &&
         for script in .githooks/commit-msg .githooks/pre-commit; do
             sh -n "$script" || return 1
         done &&
@@ -112,8 +114,8 @@ if ! (check_staged_tree); then
     rm -rf "$staged_tree"
     echo >&2
     echo "[pre-commit] Commit blocked: the staged tree fails the checks above" >&2
-    echo "[pre-commit] (whitespace and line endings of owned files, the Ryu SHA-256" >&2
-    echo "[pre-commit] manifest, shell syntax). Fix and stage the files, then retry." >&2
+    echo "[pre-commit] (owned-source whitespace, dependency pins, Ryu manifest," >&2
+    echo "[pre-commit] shell syntax). Fix and stage the files, then retry." >&2
     exit 1
 fi
 rm -rf "$staged_tree"

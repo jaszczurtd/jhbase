@@ -48,9 +48,11 @@ Przygotuj raz źródła porównania, a potem uruchom pełną bramkę Linuksa:
 ```
 
 Oba skrypty przygotowania pobierają wyłącznie przypiętą, zweryfikowaną
-zawartość do `.build`. Sama bramka niczego nie pobiera, a gdy brakuje
-któregoś narzędzia w wymaganej wersji, kończy się poleceniem naprawy.
-Zobacz [wybór parsera](parser-choice.md).
+zawartość. Narzędzia i źródła porównania trafiają do `.build`, a utf8proc
+i dane zgodności Unicode do swoich ignorowanych katalogów źródeł i fixture.
+Sama bramka niczego nie pobiera; brak lub zmiana zależności kończą się
+poleceniem naprawy. Zobacz [zależności](dependencies.md)
+i [wybór parsera](parser-choice.md).
 Etap `comparison` pozwala wskazać cache przez `JHBASE_COMPARISON_ROOT`.
 
 `--commit [REF]` uruchamia runner wskazanego commita z czystego worktree na
@@ -79,8 +81,8 @@ również działają w obu językach programowania.
 
 Dla natywnego MSVC x64 i Win32 użyj [checklisty Windows](windows.md)
 i `runalltests.ps1`. Runner uruchamia te same zestawy CTest, także sprawdzenie
-układu i pakowania. Próby z flagą krótkich enumów dotyczą tylko GCC/Clang: odrzucają krótki
-enum statusów bez selektora i akceptują jawny selektor stałej szerokości.
+układu i pakowania. Próby z flagą krótkich enumów dotyczą tylko GCC/Clang:
+publiczny status musi zachować 32 bity z `-fshort-enums`, bez selektora.
 Test przechwytujący alokacje przez linker GNU jest właściwy dla Linuksa.
 
 Cross kompilacja i statyczne raporty `.su` nie potwierdzają czasu na urządzeniu,
@@ -88,6 +90,13 @@ maksymalnego stosu runtime ani rozmiaru zlinkowanego firmware; to dają
 [pomiary na urządzeniach](#pomiary-na-urządzeniach). Wynik Linuksa nie
 potwierdza odbioru MSVC/Win32. Prototyp nie dodaje jobów CI ani produkcyjnych
 workflowów generatorów.
+
+Bramka hosta sprawdza build z Unicode wyłączonym i włączonym. Sanitizery,
+Valgrind, fuzzer JSON/UTF-8 i czysty build obejmują adapter NFC oraz właściwe
+źródło utf8proc. Zestaw UTF-8 sprawdza niezależny przypięty
+`NormalizationTest.txt` i regresję pomiaru z buforem NULL. Freestanding
+linkuje każdy profil z NFC i bez niego, w obu szukając symboli alokacji.
+Windows również sprawdza oba ustawienia modułu dla każdej architektury.
 
 ## Pomiary na urządzeniach
 

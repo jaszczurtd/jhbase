@@ -1,0 +1,7 @@
+include("${CMAKE_CURRENT_LIST_DIR}/utf8proc_pin.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/git_dependency.cmake")
+get_filename_component(jb_utf8proc_source "${CMAKE_CURRENT_LIST_DIR}/../third_party/utf8proc" ABSOLUTE)
+jb_check_git_dependency("${jb_utf8proc_source}" "${UTF8PROC_REPO}" "${UTF8PROC_REF}" jb_utf8proc_error)
+if(NOT jb_utf8proc_error STREQUAL "")
+  message(FATAL_ERROR "${jb_utf8proc_error}. Run cmake -P scripts/ensure_utf8proc.cmake")
+endif()
