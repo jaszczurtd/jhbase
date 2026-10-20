@@ -13,14 +13,14 @@ wyłącznie własną kopię źródeł.
 | `fuzz` | Osobne przebiegi libFuzzer z ustalonym seedem dla parsera/UTF-8, dokładnych liczb/literałów i operacji writera; każdy ma ograniczoną liczbę prób. |
 | `freestanding` | Kompilacja, archiwum i linkowanie probe analitycznego dla profili z `scripts/freestanding.sh`: Cortex-M0+ (RP2040), M33 (RP2350 ARM, softfp), M4 (STM32G474, hard-float), RP2350 RISC-V i ESP32-S3 (Xtensa), każdy z flagami maszynowymi firmware swojej platformy; rozmiary, raport stosu i odrzucanie symboli heap we własnych obiektach i kompletnym probe. |
 | `comparison` | Przypięte porównanie coreJSON/yyjson z instrumentacją źródeł upstream i właściwego parsera. |
-| `clean` | Pierwszy configure/build/test w kopii źródeł ze spacjami, bez stanu buildu; potem build przyrostowy. |
+| `clean` | Pierwszy configure/build/test w kopii źródeł ze spacjami, bez stanu buildu, potem build przyrostowy; wszystko najstarszym obsługiwanym CMake (`third_party/cmake_minimum_version.conf`). Każde `cmake_minimum_required` musi deklarować tę wersję. |
 | `analysis` | Build cppcheck przypięty w `third_party/cppcheck_version.conf` sprawdza przenośne moduły C. |
 | `quality` | Składnia Bash, clang-format, whitespace źródeł, PMD CPD dla własnego kodu produkcyjnego, testów i przykładów oraz hooki Git sprawdzane w tymczasowym repozytorium (`tests/check_hooks.sh`). |
 
 Potrzebne narzędzia systemowe to CMake, Ninja, GCC/G++, Clang/Clang++ 18
 z libFuzzer, Valgrind, arm-none-eabi GCC/binutils, Java, clang-format, ripgrep,
-curl, unzip, tar i Git. Unity, cppcheck, PMD oraz toolchainy RISC-V i Xtensa
-są przypięte w `third_party/*_version.conf`; `./scripts/ensure_tools.sh` instaluje je
+curl, unzip, tar i Git. Unity, cppcheck, PMD, toolchainy RISC-V i Xtensa
+oraz najstarszy obsługiwany CMake są przypięte w `third_party/*_version.conf`; `./scripts/ensure_tools.sh` instaluje je
 w `.build/tools`, sprawdzając rewizje i sumy SHA-256. Bramka tylko sprawdza
 ich obecność; `--tools-root` albo `JHBASE_TOOLS_ROOT` wskazuje inne miejsce.
 Testy czytają istniejące oczekiwania liczbowe z HAL

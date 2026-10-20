@@ -12,14 +12,14 @@ corpora stay below `.build/gate`; the `clean` stage replaces only its own copy.
 | `fuzz` | Separate seeded libFuzzer runs for parser/UTF-8, exact numbers/literals and writer operations; each has a bounded run count. |
 | `freestanding` | Compile, archive and link an analysis probe for the profiles in `scripts/freestanding.sh`: Cortex-M0+ (RP2040), M33 (RP2350 ARM, softfp), M4 (STM32G474, hard-float), RP2350 RISC-V and ESP32-S3 (Xtensa), each with the machine flags of its firmware; collect sizes/stack usage and reject heap symbols in owned objects and the complete linked probe. |
 | `comparison` | Run the pinned coreJSON/yyjson comparison with instrumented upstream sources and the production parser. |
-| `clean` | First configure/build/test from a source copy with spaces and no build state, then an incremental build. |
+| `clean` | First configure/build/test from a source copy with spaces and no build state, then an incremental build, all with the oldest supported CMake (`third_party/cmake_minimum_version.conf`); every `cmake_minimum_required` must declare that version. |
 | `analysis` | The cppcheck build pinned by `third_party/cppcheck_version.conf`, checking the portable C modules. |
 | `quality` | Shell syntax, clang-format, source whitespace, PMD CPD over owned production/test/example code, and the git hooks exercised in a scratch repository (`tests/check_hooks.sh`). |
 
 Required system tools are CMake, Ninja, GCC/G++, Clang/Clang++ 18 with
 libFuzzer, Valgrind, arm-none-eabi GCC/binutils, Java, clang-format, ripgrep,
-curl, unzip, tar and Git. Unity, cppcheck, PMD and the RISC-V and Xtensa
-toolchains are pinned in `third_party/*_version.conf` and installed below `.build/tools` by
+curl, unzip, tar and Git. Unity, cppcheck, PMD, the RISC-V and Xtensa
+toolchains and the oldest supported CMake are pinned in `third_party/*_version.conf` and installed below `.build/tools` by
 `./scripts/ensure_tools.sh`, which verifies revisions and SHA-256 sums.
 The gate only checks that they are present; `--tools-root` or
 `JHBASE_TOOLS_ROOT` selects another location. Tests read the existing HAL

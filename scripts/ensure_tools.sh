@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Fetch, build and verify the gate tools pinned in third_party/*_version.conf:
-# Unity, cppcheck, PMD and the RISC-V and Xtensa toolchains. The pin files carry revisions
+# Unity, cppcheck, PMD, the RISC-V and Xtensa toolchains and the oldest
+# supported CMake. The pin files carry revisions
 # and digests only (JaszczurHAL reads the same files from its jhbase checkout);
 # the directory layout below the tools root (default .build/tools) is this
 # script's. Nothing is installed system-wide and the gate itself never
@@ -19,17 +20,17 @@ while (($#)); do
     -j[0-9]*) jb_jobs="${1#-j}"; shift ;;
     --help)
       printf '%s\n' 'Usage: scripts/ensure_tools.sh [--check] [--tools-root PATH] [-j N]' \
-        '       [unity|cppcheck|pmd|riscv-toolchain|xtensa-toolchain ...]   (default: all)'
+        '       [unity|cppcheck|pmd|riscv-toolchain|xtensa-toolchain|cmake-minimum ...]   (default: all)'
       exit 0 ;;
     -*) printf 'Unknown argument: %s\n' "$1" >&2; exit 2 ;;
     *) jb_selected+=("$1"); shift ;;
   esac
 done
-((${#jb_selected[@]})) || jb_selected=(unity cppcheck pmd riscv-toolchain xtensa-toolchain)
+((${#jb_selected[@]})) || jb_selected=(unity cppcheck pmd riscv-toolchain xtensa-toolchain cmake-minimum)
 mkdir -p "$jb_tools"
 jb_tools="$(cd "$jb_tools" && pwd -P)"
 jb_stamp=.jhbase-component
-for jb_conf in unity cppcheck pmd riscv_toolchain xtensa_toolchain; do
+for jb_conf in unity cppcheck pmd riscv_toolchain xtensa_toolchain cmake_minimum; do
   # shellcheck source=/dev/null
   source "${jb_root}/third_party/${jb_conf}_version.conf"
 done
@@ -175,6 +176,25 @@ ensure_xtensa() {
     bin/xtensa-esp32s3-elf-gcc "$XTENSA_TOOLCHAIN_GCC_MAJOR"
 }
 
+ensure_cmake_minimum() {
+  local dir="${jb_tools}/cmake-minimum" arch sha_key asset pin archive work
+  arch="$(host_arch)"
+  sha_key="CMAKE_MINIMUM_SHA256_${arch}_LIN"
+  asset="cmake-${CMAKE_MINIMUM_VERSION}-linux-${arch,,}.tar.gz"
+  pin="cmake-minimum|${CMAKE_MINIMUM_VERSION}|${asset}|${!sha_key}"
+  if ready "$dir" "$pin" && [[ -x "${dir}/bin/cmake" ]]; then
+    return
+  fi
+  missing cmake-minimum "$dir"
+  archive="$(download "${CMAKE_MINIMUM_RELEASE_BASE}/v${CMAKE_MINIMUM_VERSION}/${asset}" "${!sha_key}")"
+  work="$(staging "$dir")"
+  tar -xf "$archive" -C "$work" --strip-components=1
+  [[ "$("${work}/bin/cmake" --version | head -1)" == "cmake version ${CMAKE_MINIMUM_VERSION}" ]] ||
+    fail "The extracted CMake is not ${CMAKE_MINIMUM_VERSION}"
+  publish "$work" "$dir" "$pin"
+  printf 'CMake %s ready: %s\n' "$CMAKE_MINIMUM_VERSION" "${dir}/bin/cmake"
+}
+
 for jb_name in "${jb_selected[@]}"; do
   case "$jb_name" in
     unity) ensure_unity ;;
@@ -182,6 +202,7 @@ for jb_name in "${jb_selected[@]}"; do
     pmd) ensure_pmd ;;
     riscv-toolchain) ensure_riscv ;;
     xtensa-toolchain) ensure_xtensa ;;
+    cmake-minimum) ensure_cmake_minimum ;;
     *) fail "Unknown tool: ${jb_name}" ;;
   esac
 done

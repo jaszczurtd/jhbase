@@ -9,7 +9,8 @@ supply token storage and scratch; the parser preserves original number tokens.
 jhbase owns the status codes (`jb/status.h`) and `COUNTOF` (`jb/array.h`) that
 JaszczurHAL uses through its own headers; it does not configure or link HAL.
 Test and gate tools
-(Unity, cppcheck, PMD, the RISC-V and Xtensa toolchains) have their own pins in
+(Unity, cppcheck, PMD, the RISC-V and Xtensa toolchains, the oldest supported
+CMake) have their own pins in
 `third_party/*_version.conf`; `./scripts/ensure_tools.sh` installs them below
 `.build/tools`. Buffered float output uses the pinned Ryu subset; see
 [dependencies and licenses](doc/en/dependencies.md).

@@ -9,7 +9,8 @@ na tokeny i scratch. Parser zachowuje oryginalny zapis liczb.
 jhbase definiuje kody statusów (`jb/status.h`) i `COUNTOF` (`jb/array.h`),
 z których JaszczurHAL korzysta przez własne nagłówki. Biblioteka nie
 konfiguruje ani nie linkuje HAL. Narzędzia testów
-i bramki (Unity, cppcheck, PMD, toolchainy RISC-V i Xtensa) mają własne piny
+i bramki (Unity, cppcheck, PMD, toolchainy RISC-V i Xtensa, najstarszy
+obsługiwany CMake) mają własne piny
 w `third_party/*_version.conf`; `./scripts/ensure_tools.sh` instaluje je
 w `.build/tools`. Buforowy zapis float korzysta z przypiętego podzbioru Ryu;
 zobacz [zależności i licencje](doc/pl/dependencies.md).

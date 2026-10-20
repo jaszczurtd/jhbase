@@ -63,7 +63,8 @@ fi
 jb_tools_needed=()
 for jb_name in "${JB_STAGES[@]}"; do
   case "$jb_name" in
-    host | sanitizers | memcheck | clean) jb_stage_tools=(unity) ;;
+    host | sanitizers | memcheck) jb_stage_tools=(unity) ;;
+    clean) jb_stage_tools=(unity cmake-minimum) ;;
     freestanding) jb_stage_tools=(riscv-toolchain xtensa-toolchain) ;;
     analysis) jb_stage_tools=(cppcheck) ;;
     quality) jb_stage_tools=(pmd) ;;
@@ -80,6 +81,8 @@ fi
 source "${JB_ROOT}/third_party/pmd_version.conf"
 # shellcheck source=/dev/null
 source "${JB_ROOT}/third_party/riscv_toolchain_version.conf"
+# shellcheck source=/dev/null
+source "${JB_ROOT}/third_party/cmake_minimum_version.conf"
 # shellcheck source=scripts/freestanding.sh
 source "${JB_ROOT}/scripts/freestanding.sh"
 JB_UNITY="${JB_TOOLS}/Unity"
@@ -181,22 +184,29 @@ comparison() {
 
 clean() {
   # All writes stay inside this project, including objects of external Unity.
-  local jb_copy="${JB_GATE}/clean source"
+  # The oldest supported CMake configures, builds and runs the tests (their
+  # cmake -P scripts included); every declared minimum must name its version.
+  local jb_copy="${JB_GATE}/clean source" jb_cmake="${JB_TOOLS}/cmake-minimum/bin"
+  local jb_minimum="${CMAKE_MINIMUM_VERSION%.*}" jb_declared
+  jb_declared="$(git -C "$JB_ROOT" grep -h -o -E 'cmake_minimum_required\(VERSION [0-9.]+' -- \
+    '*.cmake' '*CMakeLists.txt' | sed 's/.* //' | sort -u)"
+  [[ "$jb_declared" == "$jb_minimum" ]] ||
+    { printf 'cmake_minimum_required must declare %s, found: %s\n' "$jb_minimum" "$jb_declared" >&2; return 1; }
   cmake -E rm -rf "$jb_copy"
   mkdir -p "$jb_copy"
   # Every .build directory stays out, also the device builds in tests/device.
   tar -C "$JB_ROOT" --exclude=./.git --exclude=.build --exclude=./evidence \
     --exclude=./NOW.md -cf - . | tar -C "$jb_copy" -xf -
-  cmake -S "$jb_copy" -B "${jb_copy}/.build/host" -G Ninja \
+  "${jb_cmake}/cmake" -S "$jb_copy" -B "${jb_copy}/.build/host" -G Ninja \
     "-DJHBASE_HAL_ROOT=${JB_HAL}" "-DJHBASE_UNITY_ROOT=${JB_UNITY}" \
     -DCMAKE_BUILD_TYPE=Release -DJHBASE_LTO=ON \
     -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \
     -DCMAKE_C_FLAGS= -DCMAKE_CXX_FLAGS=
-  cmake --build "${jb_copy}/.build/host" -j "$JB_JOBS"
-  ctest --test-dir "${jb_copy}/.build/host" --output-on-failure \
+  "${jb_cmake}/cmake" --build "${jb_copy}/.build/host" -j "$JB_JOBS"
+  "${jb_cmake}/ctest" --test-dir "${jb_copy}/.build/host" --output-on-failure \
     --output-junit "${jb_copy}/.build/host/ctest.xml"
   # This records a second no-op build, preserving the first-run evidence.
-  cmake --build "${jb_copy}/.build/host" -j "$JB_JOBS"
+  "${jb_cmake}/cmake" --build "${jb_copy}/.build/host" -j "$JB_JOBS"
 }
 
 analysis() {
