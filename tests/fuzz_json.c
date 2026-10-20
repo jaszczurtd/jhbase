@@ -1,6 +1,6 @@
 #include "jb/json.h"
 #include "jb/utf8.h"
-#include <hal/core/hal_array.h>
+#include <jb/array.h>
 #include <stdlib.h>
 #include <string.h>
 

@@ -9,10 +9,6 @@
  * or five times per second (FAIL). An addressable LED is blue while
  * measuring, then green or red.
  */
-/* jhbase needs a 32-bit hal_status_t; arm-none-eabi defaults to short enums.
- * Until HAL builds carry the selector (stage 1b) only this unit sets it. HAL
- * statuses reach it only as return values, which AAPCS widens to a word. */
-#define HAL_STATUS_FIXED_32
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_array.h>
 #include <hal/gpio/hal_gpio.h>

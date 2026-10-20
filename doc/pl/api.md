@@ -234,7 +234,7 @@ zapotrzebowanie implementacji na scratch.
 
 ```c
 #include <jb/json.h>
-#include <hal/core/hal_array.h>
+#include <jb/array.h>
 
 /** Read a boolean field using fixed, single-owner parser storage. */
 hal_status_t example_read_enabled(const char *data, size_t length,
@@ -805,7 +805,7 @@ oryginalny `HAL_EPROTO`. Przy duplikatach można osobno przekazać
 
 ```c
 #include <jb/json.h>
-#include <hal/core/hal_array.h>
+#include <jb/array.h>
 #include <stdio.h>
 
 /** Show a byte location for a trailing-comma error. */
@@ -850,10 +850,8 @@ hal_status_t example_json_error(void) {
 
 Prototyp używa naturalnego układu struktur, 32/64-bitowych wskaźników
 i `size_t`, jednobajtowego `bool` oraz 32-bitowego enuma statusów.
-CMake przekazuje `HAL_STATUS_FIXED_32`, ustalając 32-bitowy enum statusów
-w GCC/Clang bez zmiany innych enumów i globalnych atrybutów ABI toolchaina.
-Przy bezpośredniej kompilacji definiuj go spójnie przed pierwszym include
-statusów HAL. MSVC używa natywnego enuma 32-bitowego.
+`jb/status.h` utrzymuje 32-bitowy status w każdym kompilatorze, także przy
+`-fshort-enums`, bez zmiany innych enumów i globalnych atrybutów ABI toolchaina.
 
 Asercje nagłówków odrzucają niezgodne pakowanie, także rozpoczęte przed
 pierwszym include. Token zajmuje 40 bajtów w profilu 32-bitowym i 80

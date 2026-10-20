@@ -4,22 +4,37 @@ Przenośna biblioteka jest w C11. Publiczne nagłówki obsługują też C++17;
 biblioteka nie linkuje runtime C++. CMake sprawdza hashe przyjętych zależności
 i nie pobiera ich podczas configure.
 
-## Wspólne pliki HAL
+## Kody statusów i HAL
 
-Do pierwszej integracji `jb/status.h` korzysta z jedynej definicji
-`hal_status_t` w HAL. Testy i przykłady używają też `hal_array.h`, a test
-literałów czyta fixture liczb z jawnie wskazanego checkoutu HAL. Runtime HAL,
-SDK ani generatory produkcyjne nie są konfigurowane ani linkowane.
+`jb/status.h` zawiera jedyną definicję `hal_status_t` i jego funkcji
+pomocniczych, a `jb/array.h` jedyne `COUNTOF`. JaszczurHAL zależy od jhbase:
+`hal/core/hal_status.h` i `hal/core/hal_array.h` dołączają te nagłówki.
 
-Hashe nagłówków HAL i źródeł Unity zapisuje
-[dependencies.cmake](../../cmake/dependencies.cmake). Domyślny katalog HAL
-to `../JaszczurHAL`; inny wybierz przez `JHBASE_HAL_ROOT`.
+`hal_status_t` ma wszędzie 32 bity. W GCC i Clang nagłówek nadaje enumowi
+`mode(SI)`, więc `-fshort-enums`, domyślne w ARM EABI, go nie zmniejsza,
+a pozostałe enumy zachowują swój rozmiar. MSVC zawsze używa enuma 32-bitowego.
+Nie trzeba niczego definiować.
 
-`jb::status` przekazuje `HAL_STATUS_FIXED_32`. W GCC/Clang ustala to reprezentację
-enuma statusów na 32 bity bez zmiany globalnych flag rozmiaru enumów ani
-atrybutów ABI ARM używanych przez libc. MSVC już używa enuma 32-bitowego.
-Przy bezpośredniej kompilacji definiuj selektor spójnie przed pierwszym include
-statusów. Bez selektora dotychczasowy domyślny układ HAL pozostaje bez zmian.
+Biblioteka nie konfiguruje ani nie linkuje HAL. Tylko test literałów czyta
+fixture liczb z checkoutu HAL, domyślnie `../JaszczurHAL`; inny wskażesz przez
+`JHBASE_HAL_ROOT`. Hashe źródeł Unity zapisuje
+[dependencies.cmake](../../cmake/dependencies.cmake).
+
+## Zainstalowany pakiet
+
+`cmake --install` zapisuje nagłówki, bibliotekę statyczną i pakiet CMake:
+`find_package(jhbase)` udostępnia `jb::base` i `jb::status`. Pakiet zapisuje
+rewizję biblioteki w `jhbase_REVISION` i układ publicznych nagłówków
+w `jhbase_ABI_PROFILE`, na przykład `natural-ptr32-status32-bool8`. Rewizja
+pochodzi z `JHBASE_REVISION`, a bez niej z git HEAD tego checkoutu, z dopiskiem
+`-dirty` przy lokalnych zmianach; w drzewie bez gita ma wartość `unknown`.
+Plik wersji przyjmuje tylko tę samą wersję minor i tę samą szerokość wskaźnika.
+
+Projekt nadrzędny, który dołącza jhbase przez `add_subdirectory`, buduje
+bibliotekę tylko wtedy, gdy linkuje `jb::base`, i nie rejestruje testów jhbase.
+Jego instalacja zapisuje same nagłówki statusów (`abi.h`, `array.h`,
+`status.h`) i pakiet `jb::status`; `JHBASE_INSTALL_LIBRARY=ON` dokłada
+bibliotekę i pozostałe nagłówki.
 
 ## Buforowy zapis Ryu
 

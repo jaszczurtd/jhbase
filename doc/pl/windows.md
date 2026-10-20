@@ -77,12 +77,11 @@ w PATH zwykłego terminala: runner sam ładuje moduł developer shell Visual Stu
 
 ## Uruchomienie testów
 
-Prześlij kompletną migawkę sprawdzanych źródeł wraz z nagłówkami HAL,
-fixture liczb i przypiętymi źródłami Unity wskazanymi przez kontrole
-zależności. Inna rewizja nagłówków HAL zostanie prawidłowo odrzucona przez hashe.
+Prześlij kompletną migawkę sprawdzanych źródeł wraz z fixture liczb HAL
+i przypiętymi źródłami Unity wskazanymi przez kontrole zależności.
 Na Linuksie `./scripts/package_windows.sh` tworzy
 `.build/windows-transfer/jhbase-windows-source.tar.gz` z bieżącymi własnymi
-źródłami, tymi jawnymi plikami HAL, przypiętymi źródłami Unity w katalogu
+źródłami, fixture i licencją HAL, przypiętymi źródłami Unity w katalogu
 `tools` i manifestem SHA-256. Pliki ignorowane, cache buildów i lokalne klucze
 dostępu są pomijane. Rozpakuj archiwum przez windowsowe `tar` do katalogu
 z prawem zapisu; paczka ma już wymagany układ sąsiednich katalogów.

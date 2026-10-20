@@ -1,6 +1,6 @@
 #include "jb/utf8.h"
 #include "unity.h"
-#include <hal/core/hal_array.h>
+#include <jb/array.h>
 #include <string.h>
 
 void setUp(void) {}

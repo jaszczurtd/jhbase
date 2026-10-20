@@ -1,0 +1,12 @@
+@PACKAGE_INIT@
+
+# jhbase @PROJECT_VERSION@ built from @jb_revision@.
+set(jhbase_REVISION "@jb_revision@")
+set(jhbase_ABI_PROFILE "@jb_abi_profile@")
+
+include("${CMAKE_CURRENT_LIST_DIR}/jhbaseStatusTargets.cmake")
+# A package installed by a parent project (HAL) carries only jb::status.
+if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/jhbaseTargets.cmake")
+  include("${CMAKE_CURRENT_LIST_DIR}/jhbaseTargets.cmake")
+endif()
+check_required_components(jhbase)

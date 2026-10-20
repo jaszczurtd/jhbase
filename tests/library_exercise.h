@@ -3,7 +3,7 @@
 #include "jb/json_number.h"
 #include "jb/json_writer.h"
 #include "jb/literal.h"
-#include <hal/core/hal_array.h>
+#include <jb/array.h>
 
 /* Shared by the freestanding linker probe and the host allocation guard. */
 static inline int library_exercise(void) {

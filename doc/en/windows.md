@@ -77,12 +77,11 @@ loads the Visual Studio developer-shell module itself.
 
 ## Run the tests
 
-Transfer the complete reviewed source snapshot, including the HAL headers,
-numeric fixture and pinned Unity sources identified by the dependency
-checks. A different HAL header revision correctly fails the hash check.
+Transfer the complete reviewed source snapshot, including the HAL numeric
+fixture and the pinned Unity sources identified by the dependency checks.
 On Linux, `./scripts/package_windows.sh` creates
 `.build/windows-transfer/jhbase-windows-source.tar.gz` with the current owned
-sources, those explicit HAL inputs, the pinned Unity sources under `tools` and
+sources, the HAL fixture and license, the pinned Unity sources under `tools` and
 a SHA-256 manifest. Ignored files, build caches and local access keys are
 excluded. Extract it with Windows `tar` into a writable directory; the bundle
 already has the required sibling layout.

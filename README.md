@@ -6,9 +6,9 @@ jhbase provides a portable C11 UTF-8 decoder/encoder and an immutable JSON
 parser, exact numeric reads, C literals and a sequential JSON writer. Callers
 supply token storage and scratch; the parser preserves original number tokens.
 
-This is a standalone prototype. It borrows the existing HAL status and array
-headers; it does not configure or link HAL. Their hashes are in
-[cmake/dependencies.cmake](cmake/dependencies.cmake). Test and gate tools
+jhbase owns the status codes (`jb/status.h`) and `COUNTOF` (`jb/array.h`) that
+JaszczurHAL uses through its own headers; it does not configure or link HAL.
+Test and gate tools
 (Unity, cppcheck, PMD, the RISC-V and Xtensa toolchains) have their own pins in
 `third_party/*_version.conf`; `./scripts/ensure_tools.sh` installs them below
 `.build/tools`. Buffered float output uses the pinned Ryu subset; see
@@ -23,10 +23,12 @@ cmake --build .build/host
 ctest --test-dir .build/host --output-on-failure
 ```
 
-The default HAL directory is `../JaszczurHAL`. Pass
+The tests read a numeric fixture from the HAL checkout at `../JaszczurHAL`. Pass
 `-DJHBASE_HAL_ROOT=/path/to/JaszczurHAL` and, if needed,
 `-DJHBASE_TOOLS_ROOT=/path/to/tools` to select explicit locations.
 Configure downloads nothing and writes nothing to those directories.
+`cmake --install` installs the library, its headers and a CMake package
+(`find_package(jhbase)`); see [the installed package](doc/en/dependencies.md#installed-package).
 
 On Linux, run `./scripts/ensure_tools.sh` and `./scripts/prepare_comparison.sh`
 once, then the complete local suite with `./runalltests.sh`.

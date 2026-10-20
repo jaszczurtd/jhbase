@@ -1,5 +1,5 @@
 #include "jb/json_writer.h"
-#include <hal/core/hal_array.h>
+#include <jb/array.h>
 #include <stdlib.h>
 #include <string.h>
 

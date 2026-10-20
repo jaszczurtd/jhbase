@@ -1,7 +1,7 @@
 #include "jb/json_number.h"
 #include "jb/literal.h"
-#include <hal/core/hal_array.h>
 #include <inttypes.h>
+#include <jb/array.h>
 #include <stdio.h>
 #include <string.h>
 

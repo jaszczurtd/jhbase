@@ -15,7 +15,7 @@ tak samo na Linuksie, macOS i Windows: `scripts/vscode_workspace.cmake`.
   a w drugiej kolejności NMake Makefiles.
 - Przypięte źródła Unity: `./scripts/ensure_tools.sh unity` na Linuksie albo
   `JHBASE_TOOLS_ROOT` wskazujący zainstalowany katalog narzędzi.
-- Nagłówki HAL w `../JaszczurHAL` albo `JHBASE_HAL_ROOT`.
+- Fixture liczb HAL do testów w `../JaszczurHAL` albo `JHBASE_HAL_ROOT`.
 - Rozszerzenie `ms-vscode.cpptools`; `ms-vscode.cmake-tools` jest opcjonalne
   i konfiguruje w `.build/vscode/cmake-tools`.
 

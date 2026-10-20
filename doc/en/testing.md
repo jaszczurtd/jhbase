@@ -6,7 +6,7 @@ corpora stay below `.build/gate`; the `clean` stage replaces only its own copy.
 
 | Stage | Checks |
 | --- | --- |
-| `host` | GCC Release/LTO, UTF-8/JSON/numeric/writer/literal tests, C++17, independent shortest-format checks, compiled C/C++ literals and examples, ABI rejection probes. |
+| `host` | GCC Release/LTO, UTF-8/JSON/numeric/writer/literal tests, C++17, independent shortest-format checks, compiled C/C++ literals and examples, ABI rejection probes, C and C++ consumers of the installed package. |
 | `sanitizers` | Clang ASan, UBSan and LeakSanitizer over library and executables. |
 | `memcheck` | Valgrind over the actual test executables, literal probes and examples. |
 | `fuzz` | Separate seeded libFuzzer runs for parser/UTF-8, exact numbers/literals and writer operations; each has a bounded run count. |
@@ -22,9 +22,8 @@ curl, unzip, tar and Git. Unity, cppcheck, PMD and the RISC-V and Xtensa
 toolchains are pinned in `third_party/*_version.conf` and installed below `.build/tools` by
 `./scripts/ensure_tools.sh`, which verifies revisions and SHA-256 sums.
 The gate only checks that they are present; `--tools-root` or
-`JHBASE_TOOLS_ROOT` selects another location. Tests read the reviewed HAL
-status/array headers and the existing `tests/fixtures/device_tree/cases.json`
-numeric expectations. They do not read device-test firmware.
+`JHBASE_TOOLS_ROOT` selects another location. Tests read the existing HAL
+`tests/fixtures/device_tree/cases.json` numeric expectations. They do not read device-test firmware.
 LeakSanitizer requires an environment without ptrace restrictions.
 CTest writes JUnit XML in each host build directory. The `vscode_workspace`
 suite (label `tooling`) checks the VS Code task documents and runs the
@@ -54,9 +53,9 @@ pinned tool is missing. See [parser selection](parser-choice.md).
 The `comparison` stage accepts `JHBASE_COMPARISON_ROOT` for an explicit cache.
 
 `--commit [REF]` runs that commit's own runner from a detached clean worktree,
-then removes the worktree. It defaults to HEAD and uses the explicitly selected
-HAL dependencies. Their hashes must match that revision. Local uncommitted
-changes are excluded, including changes to the runner itself:
+then removes the worktree. It defaults to HEAD and reads the numeric fixture
+from the explicitly selected HAL checkout. Local uncommitted changes are
+excluded, including changes to the runner itself:
 
 ```sh
 ./runalltests.sh --commit HEAD --hal-root /path/to/matching/HAL -j4

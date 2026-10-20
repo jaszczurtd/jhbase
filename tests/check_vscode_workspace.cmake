@@ -184,7 +184,7 @@ if(NOT DEFINED JB_HAL_ROOT OR JB_HAL_ROOT STREQUAL "")
   get_filename_component(JB_HAL_ROOT "${source}/../JaszczurHAL" ABSOLUTE)
 endif()
 require("EXISTS \"${JB_UNITY_ROOT}/src/unity.c\"" "pinned Unity is missing below ${JB_UNITY_ROOT}; run scripts/ensure_tools.sh unity")
-require("EXISTS \"${JB_HAL_ROOT}/src/hal/core/hal_status.h\"" "HAL headers are missing below ${JB_HAL_ROOT}")
+require("EXISTS \"${JB_HAL_ROOT}/tests/fixtures/device_tree/cases.json\"" "the HAL numeric fixture is missing below ${JB_HAL_ROOT}")
 set(forwarded "-DJB_TOOLS_ROOT=${JB_TOOLS_ROOT}" "-DJB_UNITY_ROOT=${JB_UNITY_ROOT}"
   "-DJB_HAL_ROOT=${JB_HAL_ROOT}")
 

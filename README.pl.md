@@ -6,9 +6,9 @@ jhbase udostępnia przenośny dekoder/enkoder UTF-8, parser JSON, dokładny odcz
 liczb, literały C i sekwencyjny writer JSON w C11. Wywołujący dostarcza pamięć
 na tokeny i scratch. Parser zachowuje oryginalny zapis liczb.
 
-To samodzielny prototyp. Korzysta z istniejących nagłówków statusów i tablic
-HAL; nie konfiguruje ani nie linkuje HAL. Ich hashe są w
-[cmake/dependencies.cmake](cmake/dependencies.cmake). Narzędzia testów
+jhbase definiuje kody statusów (`jb/status.h`) i `COUNTOF` (`jb/array.h`),
+z których JaszczurHAL korzysta przez własne nagłówki. Biblioteka nie
+konfiguruje ani nie linkuje HAL. Narzędzia testów
 i bramki (Unity, cppcheck, PMD, toolchainy RISC-V i Xtensa) mają własne piny
 w `third_party/*_version.conf`; `./scripts/ensure_tools.sh` instaluje je
 w `.build/tools`. Buforowy zapis float korzysta z przypiętego podzbioru Ryu;
@@ -23,10 +23,12 @@ cmake --build .build/host
 ctest --test-dir .build/host --output-on-failure
 ```
 
-Domyślny katalog HAL to `../JaszczurHAL`.
+Testy czytają fixture liczb z checkoutu HAL w `../JaszczurHAL`.
 `-DJHBASE_HAL_ROOT=/path/to/JaszczurHAL` oraz, w razie potrzeby,
 `-DJHBASE_TOOLS_ROOT=/path/to/tools` pozwalają wskazać inne lokalizacje.
 Configure niczego nie pobiera ani nie zapisuje w tych katalogach.
+`cmake --install` instaluje bibliotekę, nagłówki i pakiet CMake
+(`find_package(jhbase)`); zobacz [zainstalowany pakiet](doc/pl/dependencies.md#zainstalowany-pakiet).
 
 Na Linuksie uruchom raz `./scripts/ensure_tools.sh` i `./scripts/prepare_comparison.sh`,
 a następnie pełny lokalny zestaw kontroli przez `./runalltests.sh`.

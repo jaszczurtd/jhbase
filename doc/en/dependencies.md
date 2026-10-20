@@ -4,22 +4,38 @@ The portable library is C11. Its public headers also support C++17; the library
 does not link a C++ runtime. CMake checks the reviewed dependency hashes and
 does not download dependencies during configure.
 
-## Shared HAL inputs
+## Status codes and HAL
 
-Until the first integration pin, `jb/status.h` borrows the sole definition of
-`hal_status_t` from HAL. Tests and examples also use `hal_array.h`, and the
-literal test reads the numeric fixture from the explicit HAL checkout. No HAL
-runtime, SDK or production generator is configured or linked.
+`jb/status.h` holds the only definition of `hal_status_t` and its helpers, and
+`jb/array.h` the only `COUNTOF`. JaszczurHAL depends on jhbase:
+`hal/core/hal_status.h` and `hal/core/hal_array.h` include these headers.
 
-The HAL header hashes and the Unity source hashes are recorded in
-[dependencies.cmake](../../cmake/dependencies.cmake). The default HAL directory
-is `../JaszczurHAL`; select another with `JHBASE_HAL_ROOT`.
+`hal_status_t` is 32 bits wide everywhere. On GCC and Clang the header gives
+the enum `mode(SI)`, so `-fshort-enums`, the ARM EABI default, leaves it
+alone while other enums keep their size. MSVC always uses a 32-bit enum. No
+define is needed.
 
-`jb::status` propagates `HAL_STATUS_FIXED_32`. On GCC/Clang this gives the status
-enum a 32-bit representation without changing global enum-size flags or ARM
-ABI attributes used by libc. MSVC already uses a 32-bit enum. Define the
-selector consistently before the first status include when compiling directly.
-The original HAL default layout remains unchanged without the selector.
+The library does not configure or link HAL. Only the literal test reads the
+numeric fixture from a HAL checkout, by default `../JaszczurHAL`; select
+another with `JHBASE_HAL_ROOT`. The Unity source hashes are recorded in
+[dependencies.cmake](../../cmake/dependencies.cmake).
+
+## Installed package
+
+`cmake --install` writes the headers, the static library and a CMake package:
+`find_package(jhbase)` gives `jb::base` and `jb::status`. The package records
+the library revision in `jhbase_REVISION` and the layout of the public headers
+in `jhbase_ABI_PROFILE`, for example `natural-ptr32-status32-bool8`. The
+revision comes from `JHBASE_REVISION`, otherwise from git HEAD of this
+checkout with a `-dirty` suffix for local changes, and is `unknown` in a tree
+without git. The version file accepts only the same minor version and the same
+pointer width.
+
+A parent project that adds jhbase with `add_subdirectory` builds the library
+only when it links `jb::base`, and registers no jhbase tests. Its install
+writes just the status headers (`abi.h`, `array.h`, `status.h`) and the
+`jb::status` package; `JHBASE_INSTALL_LIBRARY=ON` adds the library and the
+remaining headers.
 
 ## Buffered Ryu output
 

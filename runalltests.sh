@@ -84,7 +84,7 @@ source "${JB_ROOT}/third_party/riscv_toolchain_version.conf"
 source "${JB_ROOT}/scripts/freestanding.sh"
 JB_UNITY="${JB_TOOLS}/Unity"
 
-cmake "-DJHBASE_HAL_ROOT=${JB_HAL}" -P "${JB_ROOT}/cmake/dependencies.cmake"
+cmake -P "${JB_ROOT}/cmake/dependencies.cmake"
 
 configure() {
   local jb_dir="$1"; shift
@@ -202,8 +202,8 @@ clean() {
 analysis() {
   "${JB_TOOLS}/cppcheck/bin/cppcheck" \
     --enable=warning,style,performance,portability --error-exitcode=1 \
-    --std=c11 --language=c -DHAL_STATUS_FIXED_32 \
-    "-I${JB_ROOT}/include" "-I${JB_HAL}/src" "-I${JB_ROOT}/third_party/ryu" \
+    --std=c11 --language=c \
+    "-I${JB_ROOT}/include" "-I${JB_ROOT}/third_party/ryu" \
     "${JB_ROOT}/src"
 }
 

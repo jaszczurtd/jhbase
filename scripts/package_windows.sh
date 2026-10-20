@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bundle reviewed working-tree sources, the prototype's HAL test inputs and the
+# Bundle reviewed working-tree sources, the HAL numeric test fixture and the
 # pinned Unity sources for the native Windows runner.
 set -euo pipefail
 jb_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
@@ -11,16 +11,11 @@ jb_payload="${jb_output}/payload"
 mkdir -p "$jb_output"
 [[ ! -L "$jb_payload" ]] || { printf '%s\n' 'Payload directory must not be a symlink' >&2; exit 1; }
 cmake -E rm -rf "$jb_payload"
-mkdir -p "${jb_payload}/jhbase" "${jb_payload}/JaszczurHAL/src/hal/core" \
-  "${jb_payload}/tools/Unity/src" \
+mkdir -p "${jb_payload}/jhbase" "${jb_payload}/tools/Unity/src" \
   "${jb_payload}/JaszczurHAL/tests/fixtures/device_tree"
 git -C "$jb_root" ls-files --cached --others --exclude-standard -z > "${jb_output}/sources.list"
 tar -C "$jb_root" --null --verbatim-files-from --no-recursion \
   -T "${jb_output}/sources.list" -cf - | tar -C "${jb_payload}/jhbase" -xf -
-for jb_header in hal_status.h hal_array.h; do
-  cp "${jb_hal}/src/hal/core/${jb_header}" \
-    "${jb_payload}/JaszczurHAL/src/hal/core/"
-done
 for jb_source in unity.c unity.h unity_internals.h; do
   cp "${jb_tools}/Unity/src/${jb_source}" "${jb_payload}/tools/Unity/src/"
 done

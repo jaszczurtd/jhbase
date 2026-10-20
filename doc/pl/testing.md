@@ -7,7 +7,7 @@ wyłącznie własną kopię źródeł.
 
 | Etap | Kontrole |
 | --- | --- |
-| `host` | GCC Release/LTO, testy UTF-8/JSON/liczb/writera/literałów, C++17, niezależna kontrola najkrótszego zapisu, kompilowane literały i przykłady C/C++, odrzucanie błędnego ABI. |
+| `host` | GCC Release/LTO, testy UTF-8/JSON/liczb/writera/literałów, C++17, niezależna kontrola najkrótszego zapisu, kompilowane literały i przykłady C/C++, odrzucanie błędnego ABI, konsumenci C i C++ zainstalowanego pakietu. |
 | `sanitizers` | Clang ASan, UBSan i LeakSanitizer obejmujące bibliotekę i programy testowe. |
 | `memcheck` | Valgrind na właściwych executable testów, probe literałów i przykładów. |
 | `fuzz` | Osobne przebiegi libFuzzer z ustalonym seedem dla parsera/UTF-8, dokładnych liczb/literałów i operacji writera; każdy ma ograniczoną liczbę prób. |
@@ -23,8 +23,8 @@ curl, unzip, tar i Git. Unity, cppcheck, PMD oraz toolchainy RISC-V i Xtensa
 są przypięte w `third_party/*_version.conf`; `./scripts/ensure_tools.sh` instaluje je
 w `.build/tools`, sprawdzając rewizje i sumy SHA-256. Bramka tylko sprawdza
 ich obecność; `--tools-root` albo `JHBASE_TOOLS_ROOT` wskazuje inne miejsce.
-Testy czytają sprawdzone nagłówki statusów/tablic HAL i istniejące oczekiwania
-liczbowe z `tests/fixtures/device_tree/cases.json`. Nie czytają firmware'u testów
+Testy czytają istniejące oczekiwania liczbowe z HAL
+`tests/fixtures/device_tree/cases.json`. Nie czytają firmware'u testów
 sprzętowych. LeakSanitizer wymaga środowiska bez ograniczeń ptrace.
 CTest zapisuje JUnit XML w każdym katalogu buildu hostowego. Zestaw
 `vscode_workspace` (etykieta `tooling`) sprawdza dokumenty zadań VS Code
@@ -54,9 +54,9 @@ Zobacz [wybór parsera](parser-choice.md).
 Etap `comparison` pozwala wskazać cache przez `JHBASE_COMPARISON_ROOT`.
 
 `--commit [REF]` uruchamia runner wskazanego commita z czystego worktree na
-odłączonym HEAD, a następnie usuwa to worktree. Domyślnie sprawdza HEAD
-z jawnie wybranymi zależnościami HAL. Ich hashe muszą pasować do danej rewizji.
-Lokalne niezacommitowane zmiany są pomijane, także zmiany samego runnera:
+odłączonym HEAD, a następnie usuwa to worktree. Domyślnie sprawdza HEAD,
+a fixture liczb czyta z jawnie wskazanego checkoutu HAL. Lokalne
+niezacommitowane zmiany są pomijane, także zmiany samego runnera:
 
 ```sh
 ./runalltests.sh --commit HEAD --hal-root /path/to/matching/HAL -j4

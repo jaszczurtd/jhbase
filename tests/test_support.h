@@ -2,7 +2,7 @@
 #define JB_TEST_SUPPORT_H
 #include "jb/json.h"
 #include "unity.h"
-#include <hal/core/hal_array.h>
+#include <jb/array.h>
 #include <string.h>
 
 typedef struct {

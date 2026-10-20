@@ -7,32 +7,37 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-file(REAL_PATH "${CMAKE_CURRENT_SOURCE_DIR}/.build" jb_build_root)
-file(REAL_PATH "${CMAKE_BINARY_DIR}" jb_build_dir)
-string(FIND "${jb_build_dir}/" "${jb_build_root}/" jb_build_prefix)
-if(NOT jb_build_prefix EQUAL 0 OR jb_build_dir STREQUAL jb_build_root)
-  message(FATAL_ERROR "Use a build directory below jhbase/.build/")
+# A standalone build stays below jhbase/.build/ and owns the tests. A parent
+# project (HAL) keeps its own build tree and takes only the library targets.
+if(PROJECT_IS_TOP_LEVEL)
+  file(REAL_PATH "${CMAKE_CURRENT_SOURCE_DIR}/.build" jb_build_root)
+  file(REAL_PATH "${CMAKE_BINARY_DIR}" jb_build_dir)
+  string(FIND "${jb_build_dir}/" "${jb_build_root}/" jb_build_prefix)
+  if(NOT jb_build_prefix EQUAL 0 OR jb_build_dir STREQUAL jb_build_root)
+    message(FATAL_ERROR "Use a build directory below jhbase/.build/")
+  endif()
+  set(JHBASE_HAL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../JaszczurHAL"
+      CACHE PATH "HAL checkout supplying the numeric test fixture")
+  set(JHBASE_TOOLS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.build/tools"
+      CACHE PATH "Pinned gate tools placed there by scripts/ensure_tools.sh")
+  set(JHBASE_UNITY_ROOT "${JHBASE_TOOLS_ROOT}/Unity"
+      CACHE PATH "Unity checkout pinned in third_party/unity_version.conf; nothing is downloaded")
+  include(CTest)
 endif()
-
-set(JHBASE_HAL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../JaszczurHAL"
-    CACHE PATH "HAL supplying only the prototype's status and array headers")
-set(JHBASE_TOOLS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.build/tools"
-    CACHE PATH "Pinned gate tools placed there by scripts/ensure_tools.sh")
-set(JHBASE_UNITY_ROOT "${JHBASE_TOOLS_ROOT}/Unity"
-    CACHE PATH "Unity checkout pinned in third_party/unity_version.conf; nothing is downloaded")
 option(JHBASE_SANITIZERS "Instrument library and tests with address/undefined sanitizers" OFF)
 option(JHBASE_FUZZ "Build the Clang libFuzzer entrypoint" OFF)
 option(JHBASE_LTO "Enable interprocedural optimization" OFF)
 option(JHBASE_COMPARE "Build explicit pinned upstream parser comparison" OFF)
 option(JHBASE_VSCODE_CHECK "Register the VS Code workspace check as a CTest test" ON)
-include(CTest)
 
+include(GNUInstallDirs)
 include(cmake/dependencies.cmake)
 add_library(jb_status INTERFACE)
 add_library(jb::status ALIAS jb_status)
+set_target_properties(jb_status PROPERTIES EXPORT_NAME status)
 target_include_directories(jb_status INTERFACE
-  "${CMAKE_CURRENT_SOURCE_DIR}/include" "${JHBASE_HAL_ROOT}/src")
-target_compile_definitions(jb_status INTERFACE HAL_STATUS_FIXED_32)
+  "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+  "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>")
 
 add_library(jb_ryu OBJECT third_party/ryu/ryu/f2s.c third_party/ryu/ryu/d2s.c)
 target_include_directories(jb_ryu PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ryu")
@@ -42,6 +47,12 @@ add_library(jhbase STATIC src/utf8.c src/json_parse.c src/json_string.c src/json
 target_sources(jhbase PRIVATE $<TARGET_OBJECTS:jb_ryu>)
 target_include_directories(jhbase PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ryu")
 add_library(jb::base ALIAS jhbase)
+set_target_properties(jhbase PROPERTIES EXPORT_NAME base)
+# In a parent project the library builds only when something links it; the
+# install rules stay active, which EXCLUDE_FROM_ALL on add_subdirectory drops.
+if(NOT PROJECT_IS_TOP_LEVEL)
+  set_target_properties(jhbase jb_ryu PROPERTIES EXCLUDE_FROM_ALL TRUE)
+endif()
 target_link_libraries(jhbase PUBLIC jb_status)
 target_compile_features(jhbase PUBLIC c_std_11)
 set_target_properties(jhbase PROPERTIES C_EXTENSIONS OFF)
@@ -64,6 +75,7 @@ function(jb_warnings target)
   endif()
 endfunction()
 jb_warnings(jhbase)
+include(cmake/install.cmake)
 
 if(JHBASE_LTO)
   include(CheckIPOSupported)
@@ -100,7 +112,7 @@ if(JHBASE_FUZZ)
   endforeach()
 endif()
 
-if(BUILD_TESTING)
+if(PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
   jb_check_unity()
   add_library(unity STATIC "${JHBASE_UNITY_ROOT}/src/unity.c")
   target_include_directories(unity PUBLIC "${JHBASE_UNITY_ROOT}/src")
@@ -183,11 +195,19 @@ if(BUILD_TESTING)
   set_tests_properties(float_format PROPERTIES TIMEOUT 120 LABELS "basic")
   add_test(NAME abi COMMAND "${CMAKE_COMMAND}"
     "-DJB_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}"
-    "-DJB_HAL=${JHBASE_HAL_ROOT}"
     "-DJB_WORK=${CMAKE_CURRENT_BINARY_DIR}/abi"
     "-DJB_CC=${CMAKE_C_COMPILER}" "-DJB_CXX=${CMAKE_CXX_COMPILER}"
     "-DJB_MSVC=${MSVC}" -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_abi.cmake")
   set_tests_properties(abi PROPERTIES TIMEOUT 60 LABELS "basic")
+  if(NOT JHBASE_SANITIZERS AND NOT JHBASE_FUZZ)
+    add_test(NAME install COMMAND "${CMAKE_COMMAND}"
+      "-DJB_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}" "-DJB_BUILD=${CMAKE_BINARY_DIR}"
+      "-DJB_WORK=${CMAKE_CURRENT_BINARY_DIR}/install-check" "-DJB_CONFIG=$<CONFIG>"
+      "-DJB_GENERATOR=${CMAKE_GENERATOR}" "-DJB_PLATFORM=${CMAKE_GENERATOR_PLATFORM}"
+      "-DJB_CC=${CMAKE_C_COMPILER}" "-DJB_CXX=${CMAKE_CXX_COMPILER}"
+      -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_install.cmake")
+    set_tests_properties(install PROPERTIES TIMEOUT 300 LABELS "basic")
+  endif()
   # The VS Code workspace: task documents against the driver and the driver
   # actions on a scratch copy; nested builds skip this check themselves.
   if(JHBASE_VSCODE_CHECK AND NOT JHBASE_SANITIZERS AND NOT JHBASE_FUZZ)

@@ -222,7 +222,7 @@ The scratch size is checked against the implementation before parsing.
 
 ```c
 #include <jb/json.h>
-#include <hal/core/hal_array.h>
+#include <jb/array.h>
 
 /** Read a boolean field using fixed, single-owner parser storage. */
 hal_status_t example_read_enabled(const char *data, size_t length,
@@ -788,7 +788,7 @@ passed to locate separately.
 
 ```c
 #include <jb/json.h>
-#include <hal/core/hal_array.h>
+#include <jb/array.h>
 #include <stdio.h>
 
 /** Show a byte location for a trailing-comma error. */
@@ -832,10 +832,9 @@ hal_status_t example_json_error(void) {
 ### Layout and build profile
 
 The prototype uses natural layouts with 32/64-bit pointers and `size_t`,
-one-byte `bool` and a 32-bit status enum. CMake propagates `HAL_STATUS_FIXED_32`,
-which selects a 32-bit status enum on GCC/Clang without changing other enum
-types or the toolchain's global ABI attributes. Direct builds must define it
-consistently before the first HAL status include. MSVC uses its native 32-bit enum.
+one-byte `bool` and a 32-bit status enum. `jb/status.h` keeps the status at 32
+bits on every compiler, also under `-fshort-enums`, without changing other
+enum types or the toolchain's global ABI attributes.
 
 Header assertions reject incompatible packing, including packing opened
 before the first include. Tokens occupy 40 bytes on the 32-bit profile and

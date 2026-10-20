@@ -3,7 +3,7 @@
 # scripts/measure_device.sh links the archive of a profile into device
 # firmware, so the flags of a profile are the firmware ABI of its target
 # (the script refuses Pico SDK and STM32 firmware with other -m flags).
-# Sourced by both; expects JB_ROOT, JB_HAL, JB_TOOLS and the RISC-V pin.
+# Sourced by both; expects JB_ROOT, JB_TOOLS and the RISC-V pin.
 
 JB_PROFILES=(cortex-m0plus cortex-m33 cortex-m4 rp2350-riscv esp32s3)
 
@@ -38,8 +38,8 @@ jb_profile_compile() {
   cmake -E rm -rf "$jb_directory"
   mkdir -p "$jb_directory"
   JB_PROFILE_COMMON=(-std=c11 -O2 -ffreestanding -fno-builtin -fstrict-aliasing
-    -DHAL_STATUS_FIXED_32 -fstack-usage -ffunction-sections -fdata-sections
-    "-I${JB_ROOT}/include" "-I${JB_HAL}/src" "-I${JB_ROOT}/third_party/ryu")
+    -fstack-usage -ffunction-sections -fdata-sections
+    "-I${JB_ROOT}/include" "-I${JB_ROOT}/third_party/ryu")
   JB_PROFILE_WARNINGS=(-Wall -Wextra -Werror -Wpedantic -Wconversion -Wshadow -Wvla)
   JB_PROFILE_OWNED=() JB_PROFILE_OBJECTS=()
   for jb_source in "${JB_ROOT}"/src/*.c; do

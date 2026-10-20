@@ -1,7 +1,7 @@
 #include "core_json.h"
 #include "jb/json.h"
 #include "yyjson.h"
-#include <hal/core/hal_array.h>
+#include <jb/array.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>

@@ -1,6 +1,6 @@
 #include "jb/json.h"
 #include "jb/utf8.h"
-#include <hal/core/hal_array.h>
+#include <jb/array.h>
 #include <type_traits>
 
 static_assert(std::is_standard_layout<jb_json_token_t>::value, "C token layout");

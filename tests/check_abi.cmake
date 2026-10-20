@@ -15,11 +15,11 @@ function(probe name source should_pass language)
   file(WRITE "${path}" "${source}")
   if(JB_MSVC)
     set(args /nologo "/std:${standard}" /WX /c
-        "/I${JB_SOURCE}/include" "/I${JB_HAL}/src"
+        "/I${JB_SOURCE}/include"
         "${path}" "/Fo${JB_WORK}/${name}.obj")
   else()
     set(args "-std=${standard}" -Wall -Wextra -Werror -pedantic
-        "-I${JB_SOURCE}/include" "-I${JB_HAL}/src" -c
+        "-I${JB_SOURCE}/include" -c
         "${path}" -o "${JB_WORK}/${name}.o" ${ARGN})
   endif()
   execute_process(COMMAND "${compiler}" ${args}
@@ -50,9 +50,9 @@ foreach(language C CXX)
         "#include \"jb/json.h\"\n#pragma pack(push, 1)\n#include \"jb/json_number.h\"\n#include \"jb/json_writer.h\"\n#pragma pack(pop)\n"
         FALSE "${language}")
   if(NOT JB_MSVC)
-    probe("fixed_status_${language}" "#define HAL_STATUS_FIXED_32\n${includes}"
+    # The status keeps 32 bits under -fshort-enums (the ARM EABI default).
+    probe("short_enum_${language}" "#include \"jb/status.h\"\n${includes}"
           TRUE "${language}" -fshort-enums)
-    probe("short_enum_${language}" "${includes}" FALSE "${language}" -fshort-enums)
     probe("packed_flag_${language}" "${includes}" FALSE "${language}" -fpack-struct=1)
   endif()
 endforeach()
