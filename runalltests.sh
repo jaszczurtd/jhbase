@@ -104,7 +104,7 @@ configure() {
   local jb_dir="$1"; shift
   cmake -S "$JB_ROOT" -B "$jb_dir" -G Ninja \
     "-DJHBASE_HAL_ROOT=${JB_HAL}" "-DJHBASE_UNITY_ROOT=${JB_UNITY}" -DCMAKE_BUILD_TYPE=Release \
-    -DBUILD_TESTING=ON -DJHBASE_LTO=OFF -DJHBASE_SANITIZERS=OFF -DJHBASE_UNICODE=OFF \
+    -DBUILD_TESTING=ON -DJHBASE_LTO=OFF -DJHBASE_SANITIZERS=OFF -DJHBASE_UNICODE=OFF -DJHBASE_HOST=ON \
     -DJHBASE_FUZZ=OFF -DJHBASE_COMPARE=OFF \
     -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \
     -DCMAKE_C_FLAGS= -DCMAKE_CXX_FLAGS= "$@"
@@ -139,12 +139,14 @@ memcheck() {
       --errors-for-leak-kinds=all "${JB_GATE}/memcheck/${jb_test}"
   done
   valgrind --error-exitcode=99 --leak-check=full --show-leak-kinds=all \
+    --errors-for-leak-kinds=all "${JB_GATE}/memcheck/test_host_memcheck" "${JB_GATE}/memcheck/host-files"
+  valgrind --error-exitcode=99 --leak-check=full --show-leak-kinds=all \
     --errors-for-leak-kinds=all "${JB_GATE}/memcheck/test_literals" \
     "${JB_HAL}/tests/fixtures/device_tree/cases.json"
 }
 
 fuzz() {
-  configure "${JB_GATE}/fuzz" -DBUILD_TESTING=OFF -DJHBASE_FUZZ=ON -DJHBASE_UNICODE=ON \
+  configure "${JB_GATE}/fuzz" -DBUILD_TESTING=OFF -DJHBASE_FUZZ=ON -DJHBASE_UNICODE=ON -DJHBASE_HOST=OFF \
     -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18
   for jb_fuzzer in json numbers writer; do
     mkdir -p "${JB_GATE}/fuzz/${jb_fuzzer}/corpus" "${JB_GATE}/fuzz/${jb_fuzzer}/artifacts"
@@ -189,7 +191,7 @@ freestanding() {
 
 comparison() {
   local jb_reference="${JHBASE_COMPARISON_ROOT:-${JB_ROOT}/.build/comparison}"
-  configure "${JB_GATE}/comparison" -DBUILD_TESTING=OFF -DJHBASE_COMPARE=ON \
+  configure "${JB_GATE}/comparison" -DBUILD_TESTING=OFF -DJHBASE_COMPARE=ON -DJHBASE_HOST=OFF \
     -DJHBASE_SANITIZERS=ON -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18 \
     "-DJHBASE_COREJSON_ROOT=${jb_reference}/coreJSON" "-DJHBASE_YYJSON_ROOT=${jb_reference}/yyjson"
   ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
@@ -214,7 +216,7 @@ clean() {
     --exclude=./NOW.md -cf - . | tar -C "$jb_copy" -xf -
   "${jb_cmake}/cmake" -S "$jb_copy" -B "${jb_copy}/.build/host" -G Ninja \
     "-DJHBASE_HAL_ROOT=${JB_HAL}" "-DJHBASE_UNITY_ROOT=${JB_UNITY}" \
-    -DCMAKE_BUILD_TYPE=Release -DJHBASE_LTO=ON -DJHBASE_UNICODE=ON \
+    -DCMAKE_BUILD_TYPE=Release -DJHBASE_LTO=ON -DJHBASE_UNICODE=ON -DJHBASE_HOST=ON \
     -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \
     -DCMAKE_C_FLAGS= -DCMAKE_CXX_FLAGS=
   "${jb_cmake}/cmake" --build "${jb_copy}/.build/host" -j "$JB_JOBS"
@@ -230,7 +232,10 @@ analysis() {
     --std=c11 --language=c \
     "-I${JB_ROOT}/include" "-I${JB_ROOT}/third_party/ryu" \
     "-I${JB_ROOT}/third_party/utf8proc" -DUTF8PROC_STATIC \
-    "${JB_ROOT}/src"
+    "${JB_ROOT}"/src/*.c
+  "${JB_TOOLS}/cppcheck/bin/cppcheck" \
+    --enable=warning,style,performance,portability --error-exitcode=1 \
+    --std=c++17 --language=c++ "-I${JB_ROOT}/include" "${JB_ROOT}/src/host"
 }
 
 quality() {
@@ -241,7 +246,7 @@ quality() {
   "${JB_ROOT}/tests/check_hooks.sh"
   clang-format --dry-run --Werror "${JB_ROOT}"/include/jb/*.h \
     "${JB_ROOT}"/src/*.[ch] "${JB_ROOT}"/tests/*.c "${JB_ROOT}"/tests/*.h \
-    "${JB_ROOT}"/tests/*.cpp "${JB_ROOT}"/examples/*.c
+    "${JB_ROOT}"/tests/*.cpp "${JB_ROOT}"/src/host/*.cpp "${JB_ROOT}"/examples/*.c
   cmake "-DJB_SOURCE=${JB_ROOT}" -P "${JB_ROOT}/tests/check_source.cmake"
   if git -C "$JB_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     git -C "$JB_ROOT" diff --check

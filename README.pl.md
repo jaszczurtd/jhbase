@@ -52,6 +52,7 @@ Opcjonalne NFC i właściwości znaków włącza `JHBASE_UNICODE=ON` i target
 `jb::unicode`; opisuje je [sekcja Unicode](doc/pl/api.md#unicode).
 Przypięty checkout przygotowuje `cmake -P scripts/ensure_utf8proc.cmake`.
 JSON Pointer odczytuje i zapisuje ścieżki przez [json_pointer.h](include/jb/json_pointer.h).
+Operacje plikowe hosta włącza `JHBASE_HOST=ON` i target `jb::host`; zobacz [pliki hosta](doc/pl/host.md).
 JSON Schema pozostaje poza obecnym zakresem.
 Publiczne ABI prototypu może zmienić się przed pierwszą integracją.
 

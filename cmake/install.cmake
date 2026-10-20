@@ -63,6 +63,12 @@ if(JHBASE_INSTALL_LIBRARY)
           ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}" COMPONENT jhbase_library)
   install(EXPORT jhbaseTargets NAMESPACE jb:: DESTINATION "${jb_cmake_dir}"
           COMPONENT jhbase_library)
+  if(JHBASE_HOST)
+    install(TARGETS jb_host EXPORT jhbaseHostTargets
+            ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}" COMPONENT jhbase_library)
+    install(EXPORT jhbaseHostTargets NAMESPACE jb:: DESTINATION "${jb_cmake_dir}"
+            COMPONENT jhbase_library)
+  endif()
   if(JHBASE_UNICODE)
     install(TARGETS jb_unicode EXPORT jhbaseUnicodeTargets
             ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}" COMPONENT jhbase_library)

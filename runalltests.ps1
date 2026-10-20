@@ -46,7 +46,7 @@ foreach ($arch in $Architecture) {
         $build = Join-Path $PSScriptRoot ".build/msvc-$arch$suffix"
         Invoke-Checked 'cmake' @('-S', $PSScriptRoot, '-B', $build,
             '-G', 'Visual Studio 17 2022', '-A', $arch, "-DJHBASE_HAL_ROOT=$hal",
-            "-DJHBASE_TOOLS_ROOT=$tools", "-DJHBASE_UNICODE=$unicode")
+            "-DJHBASE_TOOLS_ROOT=$tools", "-DJHBASE_UNICODE=$unicode", '-DJHBASE_HOST=ON')
         Invoke-Checked 'cmake' @('--build', $build, '--config', 'Release', '--parallel', "$Jobs")
         Invoke-Checked 'ctest' @('--test-dir', $build, '-C', 'Release', '--output-on-failure',
             '--output-junit', (Join-Path $build 'ctest.xml'))

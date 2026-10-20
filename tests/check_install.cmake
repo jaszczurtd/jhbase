@@ -84,10 +84,18 @@ function(consumer name prefix library)
     if(JB_UNICODE)
       string(APPEND code "#include <jb/unicode.h>\n")
     endif()
+    if(JB_HOST)
+      string(APPEND code "#include <jb/file.h>\n")
+    endif()
   endif()
   string(APPEND code "int main(void) {\n  static const char text[] = \"ok\";\n"
     "  hal_status_t status = (COUNTOF(text) == 3u) ? HAL_OK : HAL_EINVAL;\n")
   if(library)
+    if(JB_HOST)
+      string(APPEND code "  jb_file_data_t file = {0, 0};\n"
+        "  if (jb_file_read(\"\", 0u, &file) != HAL_EINVAL) return 4;\n"
+        "  jb_file_release(&file);\n")
+    endif()
     string(APPEND code "  size_t bad = 0;\n"
       "  if (status == HAL_OK) status = jb_utf8_validate(text, 2u, &bad);\n")
     string(APPEND code "  const jb_json_span_t input = {\"true\", 4u}, path = {0, 0};\n"
@@ -114,7 +122,11 @@ function(consumer name prefix library)
     if(JB_UNICODE)
       set(target jb::unicode)
     endif()
+    if(JB_HOST)
+      list(APPEND target jb::host)
+    endif()
   endif()
+  string(JOIN " " target ${target})
   file(WRITE "${dir}/CMakeLists.txt"
     "cmake_minimum_required(VERSION 3.22)\nproject(consumer C CXX)\n"
     "find_package(jhbase 0.1 REQUIRED CONFIG)\n"

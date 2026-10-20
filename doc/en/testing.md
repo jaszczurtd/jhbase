@@ -13,7 +13,7 @@ corpora stay below `.build/gate`; the `clean` stage replaces only its own copy.
 | `freestanding` | Compile, archive and link an analysis probe for the profiles in `scripts/freestanding.sh`: Cortex-M0+ (RP2040), M33 (RP2350 ARM, softfp), M4 (STM32G474, hard-float), RP2350 RISC-V and ESP32-S3 (Xtensa), each with the machine flags of its firmware; collect sizes/stack usage and reject heap symbols in owned objects and the complete linked probe. |
 | `comparison` | Run the pinned coreJSON/yyjson comparison with instrumented upstream sources and the production parser. |
 | `clean` | First configure/build/test from a source copy with spaces and no build state, then an incremental build, all with the oldest supported CMake (`third_party/cmake_minimum_version.conf`); every `cmake_minimum_required` must declare that version. |
-| `analysis` | The cppcheck build pinned by `third_party/cppcheck_version.conf`, checking the portable C modules. |
+| `analysis` | The cppcheck build pinned by `third_party/cppcheck_version.conf`, checking portable C and host C++17 modules. |
 | `quality` | Shell syntax, clang-format, source whitespace, PMD CPD over owned production/test/example code, and the git hooks exercised in a scratch repository (`tests/check_hooks.sh`). |
 
 The host stage tests builds with Unicode disabled and enabled. Sanitizers,
@@ -164,3 +164,11 @@ written floats reading back to the same bits. `result=PASS` requires all of
 them. The LED blinks during the measurement, then once per second for PASS or
 five times per second for FAIL; an addressable LED shows blue, then green or
 red.
+
+With `JHBASE_HOST=ON`, native, sanitizer and Windows builds also exercise the
+host file API, including binary limits, UTF-8 paths, check mode, temporary-file
+cleanup and allocation failures at the C API boundary. Valgrind runs the file
+operations without allocation fault injection because it replaces global
+`operator new`; native and sanitizer runs retain that separate check.
+The installed-package checks compile and link both C and C++ consumers of
+`jb::host`. Freestanding profiles continue to compile only portable sources.

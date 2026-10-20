@@ -167,3 +167,11 @@ z parse, walidację UTF-8 oraz odczyt zapisanych liczb do tych samych bitów.
 `result=PASS` wymaga wszystkich. Dioda miga podczas pomiaru, a potem raz na
 sekundę przy PASS albo pięć razy na sekundę przy FAIL; dioda adresowalna
 świeci na niebiesko, a potem na zielono albo czerwono.
+
+Z `JHBASE_HOST=ON` buildy natywne, sanitizery i Windows sprawdzają też API plików
+hosta: limity binarnego odczytu, ścieżki UTF-8, check, sprzątanie plików
+tymczasowych i błędy alokacji na granicy API C. Valgrind uruchamia operacje
+plikowe bez wymuszania błędów alokacji, ponieważ podmienia globalny
+`operator new`. Ten osobny check pozostaje w testach natywnych i sanitizerach.
+Kontrole instalacji kompilują i linkują konsumentów `jb::host` w C oraz C++.
+Profile freestanding nadal kompilują wyłącznie źródła przenośne.
