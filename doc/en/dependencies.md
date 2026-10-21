@@ -44,9 +44,15 @@ unmodified utf8proc checkout ignored by Git. The
 [pin](../../third_party/utf8proc_version.conf) records utf8proc 2.12.0 with
 Unicode 18.0.0. Prepare it explicitly with
 `cmake -P scripts/ensure_utf8proc.cmake`; `-DJB_VERIFY_ONLY=ON` checks it
-without downloading or replacing anything. Configure verifies revision,
+without downloading or replacing anything. To share a checkout managed by a
+parent project, set `JHBASE_UTF8PROC_DIR` to its absolute path. An empty value
+selects `third_party/utf8proc`; an invalid external path fails without falling
+back to it. The same pin applies to both paths. The preparation script only
+manages the default path; configure and build leave external sources untouched.
+Configure and each build of the Unicode module verify revision,
 origin, clean state and actual source bytes against Git objects, including
-edits hidden by index flags. The
+edits hidden by index flags. Installation takes the license from the selected
+checkout. The
 [upstream license](https://github.com/JuliaStrings/utf8proc/blob/79cdd5ab40c79afa559f689ffc13b76812dee1ac/LICENSE.md) is MIT for code,
 Unicode-DFS-2015 for the tables.
 

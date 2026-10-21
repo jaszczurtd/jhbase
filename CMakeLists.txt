@@ -29,6 +29,7 @@ option(JHBASE_FUZZ "Build the Clang libFuzzer entrypoint" OFF)
 option(JHBASE_LTO "Enable interprocedural optimization" OFF)
 option(JHBASE_COMPARE "Build explicit pinned upstream parser comparison" OFF)
 option(JHBASE_UNICODE "Build optional Unicode normalization and character properties" OFF)
+set(JHBASE_UTF8PROC_DIR "" CACHE PATH "Existing utf8proc checkout; empty uses third_party/utf8proc")
 option(JHBASE_HOST "Build Linux/Windows file operations (C++17 runtime)" OFF)
 option(JHBASE_VSCODE_CHECK "Register the VS Code workspace check as a CTest test" ON)
 
@@ -98,13 +99,18 @@ if(JHBASE_HOST)
 endif()
 if(JHBASE_UNICODE)
   include(cmake/utf8proc_verify.cmake)
-  add_library(jb_utf8proc OBJECT third_party/utf8proc/utf8proc.c)
+  add_custom_target(jb_verify_utf8proc
+    COMMAND "${CMAKE_COMMAND}" "-DJHBASE_UTF8PROC_DIR=${jb_utf8proc_source}"
+      -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/utf8proc_verify.cmake"
+    COMMENT "Verifying the clean utf8proc pin" VERBATIM)
+  add_library(jb_utf8proc OBJECT "${jb_utf8proc_source}/utf8proc.c")
+  add_dependencies(jb_utf8proc jb_verify_utf8proc)
   target_compile_definitions(jb_utf8proc PRIVATE UTF8PROC_STATIC)
   add_library(jb_unicode STATIC src/unicode.c $<TARGET_OBJECTS:jb_utf8proc>)
   add_library(jb::unicode ALIAS jb_unicode)
   set_target_properties(jb_unicode PROPERTIES EXPORT_NAME unicode C_EXTENSIONS OFF)
   target_link_libraries(jb_unicode PUBLIC jb::base)
-  target_include_directories(jb_unicode PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party/utf8proc")
+  target_include_directories(jb_unicode PRIVATE "${jb_utf8proc_source}")
   target_compile_definitions(jb_unicode PRIVATE UTF8PROC_STATIC)
   jb_warnings(jb_unicode)
   if(MSVC)
@@ -296,6 +302,7 @@ if(PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
       "-DJB_GENERATOR=${CMAKE_GENERATOR}" "-DJB_PLATFORM=${CMAKE_GENERATOR_PLATFORM}"
       "-DJB_CC=${CMAKE_C_COMPILER}" "-DJB_CXX=${CMAKE_CXX_COMPILER}"
       "-DJB_UNICODE=${JHBASE_UNICODE}"
+      "-DJB_UTF8PROC=${jb_utf8proc_source}"
       "-DJB_HOST=${JHBASE_HOST}"
       -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_install.cmake")
     set_tests_properties(install PROPERTIES TIMEOUT 300 LABELS "basic")

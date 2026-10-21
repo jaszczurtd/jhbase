@@ -19,29 +19,105 @@ function(run)
   endif()
 endfunction()
 
+function(reject reason)
+  execute_process(COMMAND ${ARGN} RESULT_VARIABLE result OUTPUT_VARIABLE output
+    ERROR_VARIABLE output)
+  if(result EQUAL 0 OR NOT output MATCHES "${reason}")
+    fail("expected ${reason} from ${ARGN}, got ${result}:\n${output}")
+  endif()
+endfunction()
+
 file(REMOVE_RECURSE "${JB_WORK}")
 file(REAL_PATH "${JB_SOURCE}" source)
+set(platform)
+if(JB_PLATFORM)
+  set(platform -A "${JB_PLATFORM}")
+endif()
 if(JB_UNICODE)
   include("${JB_SOURCE}/cmake/git_dependency.cmake")
   include("${JB_SOURCE}/cmake/utf8proc_pin.cmake")
-  set(dependency "${JB_WORK}/dependency")
-  file(COPY "${JB_SOURCE}/third_party/utf8proc/" DESTINATION "${dependency}")
+  set(dependency "${JB_WORK}/external utf8proc ż")
+  file(COPY "${JB_UTF8PROC}/" DESTINATION "${dependency}")
   jb_check_git_dependency("${dependency}" "${UTF8PROC_REPO}" "${UTF8PROC_REF}" error)
   if(NOT error STREQUAL "")
     fail("a clean dependency copy failed verification: ${error}")
   endif()
+  # HAL keeps jhbase and utf8proc in separate managed checkouts. This source
+  # sample deliberately has no nested utf8proc, so a fallback cannot pass.
+  set(external "${JB_WORK}/external Unicode")
+  set(library "${external}/source")
+  file(COPY "${JB_SOURCE}/CMakeLists.txt" "${JB_SOURCE}/cmake"
+    "${JB_SOURCE}/include" "${JB_SOURCE}/src" DESTINATION "${library}")
+  file(COPY "${JB_SOURCE}/third_party/ryu" "${JB_SOURCE}/third_party/utf8proc_version.conf"
+    DESTINATION "${library}/third_party")
+  file(WRITE "${external}/main.c"
+    "#include <jb/unicode.h>\nint main(void) {\n"
+    "  int32_t scratch[4];\n  const char *text = 0;\n  size_t length = 0;\n"
+    "  return jb_unicode_nfc(\"abc\", 3u, scratch, 4u, 100u, &text, &length) == HAL_OK"
+    " && length == 3u ? 0 : 1;\n}\n")
+  file(WRITE "${external}/CMakeLists.txt"
+    "cmake_minimum_required(VERSION 3.22)\nproject(external_unicode C CXX)\n"
+    "set(JHBASE_UNICODE ON CACHE BOOL \"\" FORCE)\n"
+    "set(JHBASE_INSTALL_LIBRARY ON CACHE BOOL \"\" FORCE)\n"
+    "if(DEFINED JB_PARENT_UTF8PROC)\n"
+    "  set(JHBASE_UTF8PROC_DIR \"\${JB_PARENT_UTF8PROC}\")\nendif()\n"
+    "add_subdirectory(source jhbase)\nadd_executable(probe main.c)\n"
+    "target_link_libraries(probe PRIVATE jb::unicode)\n")
+  set(configure_options -G "${JB_GENERATOR}" ${platform} "-DCMAKE_C_COMPILER=${JB_CC}"
+    "-DCMAKE_CXX_COMPILER=${JB_CXX}" "-DCMAKE_BUILD_TYPE=${JB_CONFIG}")
+  set(configure "${CMAKE_COMMAND}" -S "${external}" -B "${external}/build"
+    ${configure_options})
+  reject("Managed checkout is missing" ${configure}
+    "-DJHBASE_UTF8PROC_DIR:PATH=${external}/missing")
+  # A parent's normal variable shadows the PATH cache entry, so CMake does not
+  # make it absolute. Git would resolve this path from the working directory
+  # and the compiler from the jhbase source directory: different checkouts.
+  file(RELATIVE_PATH relative "${CMAKE_CURRENT_BINARY_DIR}" "${dependency}")
+  reject("JHBASE_UTF8PROC_DIR must be an absolute path"
+    "${CMAKE_COMMAND}" -S "${external}" -B "${external}/relative" ${configure_options}
+    "-DJB_PARENT_UTF8PROC=${relative}")
+  file(SHA256 "${dependency}/.git/index" dependency_index)
+  run(${configure} "-DJHBASE_UTF8PROC_DIR:PATH=${dependency}")
+  set(build "${CMAKE_COMMAND}" --build "${external}/build" --config "${JB_CONFIG}")
+  run(${build})
+  file(GLOB_RECURSE probes "${external}/build/probe" "${external}/build/probe.exe")
+  list(LENGTH probes count)
+  if(NOT count EQUAL 1)
+    fail("external Unicode probe not built")
+  endif()
+  run("${probes}")
+  run("${CMAKE_COMMAND}" --install "${external}/build" --config "${JB_CONFIG}"
+    --component jhbase_library --prefix "${external}/installed")
+  file(SHA256 "${dependency}/LICENSE.md" expected_license)
+  file(SHA256 "${external}/installed/share/jhbase/licenses/utf8proc/LICENSE.md" actual_license)
+  if(NOT actual_license STREQUAL expected_license)
+    fail("external Unicode license was not installed")
+  endif()
+  file(SHA256 "${dependency}/.git/index" actual_index)
+  if(NOT actual_index STREQUAL dependency_index)
+    fail("external Unicode configure/build changed the dependency index")
+  endif()
+  find_program(dependency_git NAMES git REQUIRED)
+  run("${dependency_git}" -C "${dependency}" remote set-url origin "https://example.invalid/wrong.git")
+  reject("Wrong origin" ${configure} "-DJHBASE_UTF8PROC_DIR:PATH=${dependency}")
+  run("${dependency_git}" -C "${dependency}" remote set-url origin "${UTF8PROC_REPO}")
+  run(${configure} "-DJHBASE_UTF8PROC_DIR:PATH=${dependency}")
+  file(WRITE "${dependency}/unexpected.o" "unexpected content\n")
+  reject("Modified managed checkout" ${build})
+  file(REMOVE "${dependency}/unexpected.o")
   file(APPEND "${dependency}/utf8proc.c" "\n/* mutation */\n")
   jb_check_git_dependency("${dependency}" "${UTF8PROC_REPO}" "${UTF8PROC_REF}" error)
   if(error STREQUAL "")
     fail("a modified dependency passed verification")
   endif()
-  find_program(dependency_git NAMES git REQUIRED)
   run("${dependency_git}" -C "${dependency}" update-index --assume-unchanged utf8proc.c)
   jb_check_git_dependency("${dependency}" "${UTF8PROC_REPO}" "${UTF8PROC_REF}" error)
   if(error STREQUAL "")
     fail("an assume-unchanged dependency edit passed verification")
   endif()
-  file(COPY "${JB_SOURCE}/third_party/utf8proc/utf8proc.c" DESTINATION "${dependency}")
+  reject("Dependency source bytes differ" ${build})
+  file(COPY "${JB_UTF8PROC}/utf8proc.c" DESTINATION "${dependency}")
+  run(${build})
   jb_check_git_dependency("${dependency}" "${UTF8PROC_REPO}" "0000000000000000000000000000000000000000" error)
   if(error STREQUAL "")
     fail("a wrong dependency pin passed verification")
@@ -60,6 +136,7 @@ if(JB_UNICODE)
   execute_process(COMMAND "${dependency_git}" -C "${dependency}" rev-parse HEAD
     OUTPUT_VARIABLE fixture_revision OUTPUT_STRIP_TRAILING_WHITESPACE
     COMMAND_ERROR_IS_FATAL ANY)
+  reject("Wrong revision" ${build})
   jb_check_git_dependency("${dependency}" "${UTF8PROC_REPO}" "${fixture_revision}" error)
   if(error STREQUAL "")
     fail("an unrequested gitlink passed verification")
@@ -93,10 +170,6 @@ if(JB_UNICODE)
   if(error STREQUAL "")
     fail("Unicode test data without its license passed verification")
   endif()
-endif()
-set(platform)
-if(JB_PLATFORM)
-  set(platform -A "${JB_PLATFORM}")
 endif()
 
 # consumer NAME PREFIX LIBRARY: build and run a C and a C++ program that use
