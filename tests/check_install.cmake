@@ -50,6 +50,31 @@ if(JB_UNICODE)
   if(error STREQUAL "")
     fail("a wrong dependency origin passed verification")
   endif()
+  # PCRE2-8 leaves its unused JIT submodule uninitialised. Only an explicit
+  # allowance may accept that empty gitlink; files inside must still fail.
+  run("${dependency_git}" -C "${dependency}" update-index --add --cacheinfo
+    "160000,${UTF8PROC_REF},deps/unused")
+  run("${dependency_git}" -c user.name=jhbase-test -c user.email=test@jhbase.invalid
+    -C "${dependency}" commit -q -m "Dependency fixture with unused gitlink")
+  file(MAKE_DIRECTORY "${dependency}/deps/unused")
+  execute_process(COMMAND "${dependency_git}" -C "${dependency}" rev-parse HEAD
+    OUTPUT_VARIABLE fixture_revision OUTPUT_STRIP_TRAILING_WHITESPACE
+    COMMAND_ERROR_IS_FATAL ANY)
+  jb_check_git_dependency("${dependency}" "${UTF8PROC_REPO}" "${fixture_revision}" error)
+  if(error STREQUAL "")
+    fail("an unrequested gitlink passed verification")
+  endif()
+  jb_check_git_dependency("${dependency}" "${UTF8PROC_REPO}" "${fixture_revision}" error
+    EMPTY_SUBMODULES deps/unused)
+  if(NOT error STREQUAL "")
+    fail("an explicitly allowed empty submodule failed verification: ${error}")
+  endif()
+  file(WRITE "${dependency}/deps/unused/.hidden" "unexpected content\n")
+  jb_check_git_dependency("${dependency}" "${UTF8PROC_REPO}" "${fixture_revision}" error
+    EMPTY_SUBMODULES deps/unused)
+  if(error STREQUAL "")
+    fail("a file inside the unused submodule passed verification")
+  endif()
   include("${JB_SOURCE}/cmake/unicode_fixture.cmake")
   set(fixture "${JB_WORK}/Unicode fixture")
   file(COPY "${JB_SOURCE}/tests/fixtures/unicode/" DESTINATION "${fixture}")
