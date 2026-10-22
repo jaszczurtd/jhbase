@@ -1,11 +1,12 @@
 # Wybór parsera
 
-Obecna implementacja zachowuje tokenowy parser jhbase. Jego API C pozostaje
-prototypem do czasu przyjęcia testów natywnego Windows i pomiarów targetów.
+Tokenowy parser jhbase odczytuje JSON w pamięci przekazanej przez wywołującego,
+z jawnymi limitami pamięci i pracy. Zasady dotyczące ABI jego API C
+opisuje [README](../../README.pl.md).
 
 Wymagane zachowanie łączy jawne długości bajtowe, wewnętrzny NUL, surowe tokeny
 liczb, odrzucanie zdekodowanych duplikatów kluczy, oryginalne zakresy w źródle,
-diagnostykę offsetu, pamięć callera oraz skończone budżety głębokości, danych
+diagnostykę pozycji błędu, pamięć przekazaną przez wywołującego oraz skończone budżety głębokości, danych
 i porównań. Parser i writer współdzielą UTF-8 i dekodowanie stringów; konwersja
 liczb korzysta z oryginalnego tokenu dziesiętnego.
 
@@ -22,7 +23,8 @@ Configure sprawdza hashe źródeł i nagłówków przed kompilacją porównania.
 
 Porównanie używa natywnego `JSON_Validate` oraz `yyjson_read_opts` z
 `YYJSON_READ_NUMBER_AS_RAW` i jawną pulą pamięci. Sprawdza też błędne UTF-8,
-pary surrogate, dane po NUL, składnię liczb i limity głębokości. Odtworzenie:
+pary surrogatów, dane po NUL, składnię liczb i limity głębokości.
+Aby odtworzyć porównanie, uruchom:
 
 ```sh
 ./scripts/prepare_comparison.sh
@@ -35,7 +37,7 @@ coreJSON wymagałby zmiany obsługi NUL oraz dodania budowania tokenów,
 kontroli zdekodowanych kluczy, diagnostyki i liczenia pracy. yyjson potrzebowałby
 adaptera do wymaganych niemodyfikowalnych rekordów z zakresami w źródle,
 liczenia limitów i kontroli duplikatów. Obecny rdzeń już realizuje te elementy
-w tym samym modelu pamięci callera co writer i moduły liczbowe.
+w tym samym modelu pamięci wywołującego co writer i moduły liczbowe.
 
 Benchmark porównuje różne operacje: pełne parsowanie tokenów jhbase z kontrolą
 duplikatów, samą walidację coreJSON i parsowanie DOM yyjson z puli pamięci.

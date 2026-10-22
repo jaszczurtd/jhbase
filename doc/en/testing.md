@@ -10,11 +10,15 @@ corpora stay below `.build/gate`; the `clean` stage replaces only its own copy.
 | `sanitizers` | Clang ASan, UBSan and LeakSanitizer over library and executables. |
 | `memcheck` | Valgrind over the actual test executables, literal probes and examples. |
 | `fuzz` | Separate seeded libFuzzer runs for parser/UTF-8, exact numbers/literals and writer operations; each has a bounded run count. |
-| `freestanding` | Compile, archive and link an analysis probe for the profiles in `scripts/freestanding.sh`: Cortex-M0+ (RP2040), M33 (RP2350 ARM, softfp), M4 (STM32G474, hard-float), RP2350 RISC-V and ESP32-S3 (Xtensa), each with the machine flags of its firmware; collect sizes/stack usage and reject heap symbols in owned objects and the complete linked probe. |
+| `freestanding` | Compile and archive each profile from `scripts/freestanding.sh`, then link an analysis probe. Collect sizes/stack usage and reject heap symbols in owned objects and the complete linked probe. |
 | `comparison` | Run the pinned coreJSON/yyjson comparison with instrumented upstream sources and the production parser. |
 | `clean` | First configure/build/test from a source copy with spaces and no build state, then an incremental build, all with the oldest supported CMake (`third_party/cmake_minimum_version.conf`); every `cmake_minimum_required` must declare that version. |
 | `analysis` | The cppcheck build pinned by `third_party/cppcheck_version.conf`, checking portable C and host C++17 modules. |
 | `quality` | Shell syntax, clang-format, source whitespace, PMD CPD over owned production/test/example code, and the git hooks exercised in a scratch repository (`tests/check_hooks.sh`). |
+
+Freestanding profiles cover Cortex-M0+ (RP2040), M33 (RP2350 ARM, softfp),
+M4 (STM32G474, hard-float), RP2350 RISC-V and ESP32-S3 (Xtensa). Each uses
+the machine flags of its firmware.
 
 The host stage tests builds with Unicode disabled and enabled. Sanitizers,
 Valgrind, the JSON/UTF-8 fuzzer and the clean build include the NFC wrapper
@@ -93,8 +97,31 @@ The GNU linker allocation-guard test is Linux-specific.
 Cross compilation and static `.su` reports do not establish on-device timing,
 peak runtime stack or linked firmware size; the
 [device measurements](#device-measurements) do. Linux results do not establish
-MSVC/Win32 acceptance. No CI jobs or production generator workflows are added
-by this prototype.
+MSVC/Win32 acceptance. The library currently has no CI jobs. These tests do
+not run production generators.
+
+## Host file tests
+
+With `JHBASE_HOST=ON`, native, sanitizer and Windows builds also exercise the
+host file API, including binary limits, UTF-8 paths, check mode, temporary-file
+cleanup and allocation failures at the C API boundary. Valgrind runs the file
+operations without allocation fault injection because it replaces global
+`operator new`; native and sanitizer runs retain that separate check.
+The installed-package checks compile and link both C and C++ consumers of
+`jb::host`. Freestanding profiles continue to compile only portable sources.
+
+## Commit checks
+
+`./scripts/ensure_tools.sh` sets `core.hooksPath` to the versioned `.githooks`
+directory. To configure it separately, run `git config core.hooksPath .githooks`.
+The `commit-msg` hook requires a Conventional Commits subject
+(`type(scope): subject`, at most 100 characters).
+
+The `pre-commit` hook normalizes staged text, formats C/C++ with clang-format
+and checks the staged tree for source whitespace, dependency pins, the Ryu
+manifest and shell syntax. These checks apply to the staged content, which
+may differ from the working tree. The `quality` stage also exercises the
+hooks in a scratch repository.
 
 ## Device measurements
 
@@ -164,11 +191,3 @@ written floats reading back to the same bits. `result=PASS` requires all of
 them. The LED blinks during the measurement, then once per second for PASS or
 five times per second for FAIL; an addressable LED shows blue, then green or
 red.
-
-With `JHBASE_HOST=ON`, native, sanitizer and Windows builds also exercise the
-host file API, including binary limits, UTF-8 paths, check mode, temporary-file
-cleanup and allocation failures at the C API boundary. Valgrind runs the file
-operations without allocation fault injection because it replaces global
-`operator new`; native and sanitizer runs retain that separate check.
-The installed-package checks compile and link both C and C++ consumers of
-`jb::host`. Freestanding profiles continue to compile only portable sources.

@@ -1,8 +1,8 @@
 # Write JSON sequentially
 
-Include [json_writer.h](../../include/jb/json_writer.h). A writer emits one
-compact JSON value to a synchronous callback. Its state, container stack and copied
-keys live in caller memory. No heap or mutable DOM
+A writer emits one compact JSON value to a synchronous callback. Include
+[json_writer.h](../../include/jb/json_writer.h). Its state, container stack
+and copied keys live in caller memory. No heap or mutable DOM
 is required. The complete [writer example](../../examples/json_writer.c) is
 built and run as both C11 and C++17.
 

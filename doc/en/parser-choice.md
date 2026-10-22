@@ -1,7 +1,8 @@
 # Parser selection
 
-The current implementation keeps the jhbase token parser. Its C API remains a
-prototype until native Windows tests and target measurements are accepted.
+The jhbase token parser reads JSON in caller-owned storage with explicit
+memory and work limits. Its C API follows the ABI policy in
+the [README](../../README.md).
 
 The required behavior combines explicit byte lengths, embedded NUL, raw numeric
 tokens, decoded duplicate-key rejection, original source ranges, offset

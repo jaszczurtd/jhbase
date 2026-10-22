@@ -2,9 +2,9 @@
 
 Open the repository root as the workspace folder. The tasks mirror the
 JaszczurHAL projects: the same labels and shortcuts, the same place for local
-state and generated IntelliSense data. Instead of the Python entry point of the
-firmware projects, one CMake script drives everything, so the tasks behave the
-same on Linux, macOS and Windows: `scripts/vscode_workspace.cmake`.
+state and generated IntelliSense data. Build, test and install tasks use
+`scripts/vscode_workspace.cmake` on Linux and Windows. macOS has not been
+validated; sharing the script does not establish support for its toolchain.
 
 ## Requirements
 
@@ -37,8 +37,10 @@ same on Linux, macOS and Windows: `scripts/vscode_workspace.cmake`.
 
 Shortcuts come from the user keybindings file of VS Code;
 `.vscode/keybindings.reference.json` lists the entries, as in JaszczurHAL.
-Upload, serial monitor and debug-probe tasks do not exist here: jhbase is a
-host library.
+These workspace profiles build and test jhbase on the host. Board upload,
+serial monitoring and debug probes belong to the separate
+[device measurement workflow](testing.md#device-measurements). The portable
+library can be linked into firmware.
 
 The install action accepts `-DJB_INSTALL_PREFIX=/path/to/prefix` when called
 from a terminal with `cmake -DJB_ACTION=install -P scripts/vscode_workspace.cmake`.
@@ -84,5 +86,5 @@ cmake -DJB_ACTION=config-dump -P scripts/vscode_workspace.cmake
 The CTest suite `vscode_workspace` (label `tooling`; part of the host and
 clean stages and of the MSVC runner) checks the task documents against the
 driver and runs every action the tasks use on a scratch copy of the tree:
-select, build, test, refresh-intellisense, config-dump, clean and
+select, build, test, install, refresh-intellisense, config-dump, clean and
 install-hooks. `-DJHBASE_VSCODE_CHECK=OFF` leaves it out of a build.

@@ -7,15 +7,19 @@ wyłącznie własną kopię źródeł.
 
 | Etap | Kontrole |
 | --- | --- |
-| `host` | GCC Release/LTO, testy UTF-8/JSON/liczb/writera/literałów, C++17, niezależna kontrola najkrótszego zapisu, kompilowane literały i przykłady C/C++, odrzucanie błędnego ABI, konsumenci C i C++ zainstalowanego pakietu. |
+| `host` | GCC Release/LTO, testy UTF-8/JSON/liczb/writera/literałów, C++17, niezależna kontrola najkrótszego zapisu, kompilowane literały i przykłady C/C++, odrzucanie błędnego ABI, przykładowe aplikacje C i C++ korzystające z zainstalowanego pakietu. |
 | `sanitizers` | Clang ASan, UBSan i LeakSanitizer obejmujące bibliotekę i programy testowe. |
-| `memcheck` | Valgrind na właściwych executable testów, probe literałów i przykładów. |
+| `memcheck` | Valgrind uruchamia programy testowe, programy sprawdzające literały i przykłady. |
 | `fuzz` | Osobne przebiegi libFuzzer z ustalonym seedem dla parsera/UTF-8, dokładnych liczb/literałów i operacji writera; każdy ma ograniczoną liczbę prób. |
-| `freestanding` | Kompilacja, archiwum i linkowanie probe analitycznego dla profili z `scripts/freestanding.sh`: Cortex-M0+ (RP2040), M33 (RP2350 ARM, softfp), M4 (STM32G474, hard-float), RP2350 RISC-V i ESP32-S3 (Xtensa), każdy z flagami maszynowymi firmware swojej platformy; rozmiary, raport stosu i odrzucanie symboli heap we własnych obiektach i kompletnym probe. |
+| `freestanding` | Buduje archiwa profili z `scripts/freestanding.sh` i linkuje program kontrolny. Zapisuje rozmiary i użycie stosu, odrzuca symbole alokacji we własnych obiektach i kompletnym programie. |
 | `comparison` | Przypięte porównanie coreJSON/yyjson z instrumentacją źródeł upstream i właściwego parsera. |
 | `clean` | Pierwszy configure/build/test w kopii źródeł ze spacjami, bez stanu buildu, potem build przyrostowy; wszystko najstarszym obsługiwanym CMake (`third_party/cmake_minimum_version.conf`). Każde `cmake_minimum_required` musi deklarować tę wersję. |
-| `analysis` | Build cppcheck przypięty w `third_party/cppcheck_version.conf` sprawdza przenośne moduły C. |
+| `analysis` | cppcheck w wersji z `third_party/cppcheck_version.conf` sprawdza przenośne moduły C i hostowe moduły C++17. |
 | `quality` | Składnia Bash, clang-format, whitespace źródeł, PMD CPD dla własnego kodu produkcyjnego, testów i przykładów oraz hooki Git sprawdzane w tymczasowym repozytorium (`tests/check_hooks.sh`). |
+
+Profile freestanding obejmują Cortex-M0+ (RP2040), M33 (RP2350 ARM, softfp),
+M4 (STM32G474, hard-float), RP2350 RISC-V i ESP32-S3 (Xtensa). Każdy używa
+flag maszynowych firmware swojej platformy.
 
 Potrzebne narzędzia systemowe to CMake, Ninja, GCC/G++, Clang/Clang++ 18
 z libFuzzer, Valgrind, arm-none-eabi GCC/binutils, Java, clang-format, ripgrep,
@@ -65,12 +69,12 @@ niezacommitowane zmiany są pomijane, także zmiany samego runnera:
 ```
 
 Każdy fuzzer używa obecnie `-runs=100000 -seed=8259 -max_len=4096 -timeout=3`.
-Corpora i artefakty awarii mają osobne katalogi dla każdego executable.
+Zbiory wejść i artefakty awarii mają osobne katalogi dla każdego programu.
 Sanitizery i kontrola wycieków pozostają włączone. CPD odrzuca bloki duplikacji
 od 100 tokenów w obu własnych zakresach; kod porównawczy upstream jest poza
 tymi zakresami. Kod testów urządzeń pozostaje poza domyślnymi kontrolami.
 
-Probe literałów korzysta z niezależnych oczekiwanych bitów istniejącej fixture
+Program sprawdzający literały korzysta z niezależnych oczekiwanych bitów fixture
 HAL, a następnie kompiluje i uruchamia rzeczywiste wygenerowane literały jako
 C11 i C++17. Odczyt liczb sprawdzają też ustalone wektory IEEE i bezpośrednie
 odczyty natywne; najkrótszy zapis jest porównywany z C++17 `to_chars`/`from_chars`.
@@ -88,8 +92,8 @@ Test przechwytujący alokacje przez linker GNU jest właściwy dla Linuksa.
 Cross kompilacja i statyczne raporty `.su` nie potwierdzają czasu na urządzeniu,
 maksymalnego stosu runtime ani rozmiaru zlinkowanego firmware; to dają
 [pomiary na urządzeniach](#pomiary-na-urządzeniach). Wynik Linuksa nie
-potwierdza odbioru MSVC/Win32. Prototyp nie dodaje jobów CI ani produkcyjnych
-workflowów generatorów.
+potwierdza odbioru MSVC/Win32. Biblioteka nie ma obecnie jobów CI. Te testy
+nie uruchamiają produkcyjnych generatorów.
 
 Bramka hosta sprawdza build z Unicode wyłączonym i włączonym. Sanitizery,
 Valgrind, fuzzer JSON/UTF-8 i czysty build obejmują adapter NFC oraz właściwe
@@ -97,6 +101,29 @@ Valgrind, fuzzer JSON/UTF-8 i czysty build obejmują adapter NFC oraz właściwe
 `NormalizationTest.txt` i regresję pomiaru z buforem NULL. Freestanding
 linkuje każdy profil z NFC i bez niego, w obu szukając symboli alokacji.
 Windows również sprawdza oba ustawienia modułu dla każdej architektury.
+
+## Testy plików hosta
+
+Z `JHBASE_HOST=ON` buildy natywne, sanitizery i Windows sprawdzają też API plików
+hosta: limity odczytu binarnego, ścieżki UTF-8, tryb sprawdzania, sprzątanie plików
+tymczasowych i błędy alokacji na granicy API C. Valgrind uruchamia operacje
+plikowe bez wymuszania błędów alokacji, ponieważ podmienia globalny
+`operator new`. Wymuszanie błędów pozostaje w testach natywnych i sanitizerach.
+Kontrole instalacji kompilują i linkują przykładowe aplikacje korzystające
+z `jb::host` w C oraz C++. Profile freestanding nadal kompilują wyłącznie źródła przenośne.
+
+## Kontrole commitów
+
+`./scripts/ensure_tools.sh` ustawia `core.hooksPath` na katalog `.githooks`
+przechowywany w repozytorium. Aby skonfigurować go osobno, wykonaj
+`git config core.hooksPath .githooks`. Hook `commit-msg` wymaga tematu
+w formacie Conventional Commits (`type(scope): subject`, najwyżej 100 znaków).
+
+Hook `pre-commit` normalizuje tekst w indeksie, formatuje C/C++ przez
+clang-format i sprawdza przygotowane do commita drzewo: whitespace źródeł,
+piny zależności, manifest Ryu oraz składnię skryptów. Kontrole dotyczą
+zawartości indeksu, która może różnić się od drzewa roboczego. Etap `quality`
+sprawdza też działanie hooków w tymczasowym repozytorium.
 
 ## Pomiary na urządzeniach
 
@@ -167,11 +194,3 @@ z parse, walidację UTF-8 oraz odczyt zapisanych liczb do tych samych bitów.
 `result=PASS` wymaga wszystkich. Dioda miga podczas pomiaru, a potem raz na
 sekundę przy PASS albo pięć razy na sekundę przy FAIL; dioda adresowalna
 świeci na niebiesko, a potem na zielono albo czerwono.
-
-Z `JHBASE_HOST=ON` buildy natywne, sanitizery i Windows sprawdzają też API plików
-hosta: limity binarnego odczytu, ścieżki UTF-8, check, sprzątanie plików
-tymczasowych i błędy alokacji na granicy API C. Valgrind uruchamia operacje
-plikowe bez wymuszania błędów alokacji, ponieważ podmienia globalny
-`operator new`. Ten osobny check pozostaje w testach natywnych i sanitizerach.
-Kontrole instalacji kompilują i linkują konsumentów `jb::host` w C oraz C++.
-Profile freestanding nadal kompilują wyłącznie źródła przenośne.

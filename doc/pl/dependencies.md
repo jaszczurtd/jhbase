@@ -1,6 +1,6 @@
 # Zależności i profil kompilacji
 
-Przenośna biblioteka jest w C11. Publiczne nagłówki obsługują też C++17;
+Przenośna biblioteka używa C11. Publiczne nagłówki obsługują też C++17;
 biblioteka nie linkuje runtime C++. CMake sprawdza hashe przyjętych zależności
 i nie pobiera ich podczas configure.
 
@@ -16,7 +16,8 @@ a pozostałe enumy zachowują swój rozmiar. MSVC zawsze używa enuma 32-bitoweg
 Nie trzeba niczego definiować.
 
 Biblioteka nie konfiguruje ani nie linkuje HAL. Tylko test literałów czyta
-fixture liczb z checkoutu HAL, domyślnie `../JaszczurHAL`; inny wskażesz przez
+zestaw oczekiwanych wyników liczbowych z checkoutu HAL, domyślnie
+`../JaszczurHAL`; inny wskażesz przez
 `JHBASE_HAL_ROOT`. Hashe źródeł Unity zapisuje
 [dependencies.cmake](../../cmake/dependencies.cmake).
 
@@ -89,7 +90,7 @@ Writer wywołuje wyłącznie `f2s_buffered_n` i `d2s_buffered_n`, z
 zapisują do stałych buforów lokalnych. Konwersja wejścia dziesiętnego i literały
 C o ustalonej precyzji korzystają ze wspólnej dokładnej arytmetyki jhbase.
 
-Źródła upstream zawierają też helpery alokujące. Pozostają niezmienione
+Źródła upstream zawierają też funkcje alokujące pamięć. Pozostają niezmienione
 i poza publicznym API jhbase. Usuwanie nieużywanych sekcji eliminuje je ze
 zlinkowanych programów. `jb::base` przekazuje tę zasadę linkowania; kompilacja
 bezpośrednia musi używać sekcji funkcji/danych i ich GC lub odpowiedników
@@ -97,10 +98,10 @@ MSVC `/Gy /Gw` oraz `/OPT:REF`. Asercje upstream są wyłączone dla tej wewnęt
 konwersji o ograniczonych danych; instrumentowane testy wykonują właściwe
 funkcje buforowe.
 
-Kontrola freestanding sprawdza odwołania własnych obiektów i kompletny
-zlinkowany probe analityczny, w tym Ryu i libc, pod kątem symboli alokacji.
+Kontrola freestanding szuka symboli alokacji w odwołaniach własnych obiektów
+i kompletnym zlinkowanym programie kontrolnym, w tym Ryu i libc.
 Hostowy test przerywa też wykonanie przy malloc/calloc/realloc/free podczas
-wywołań biblioteki. Probe ma mapę pamięci tylko do analizy; nie jest firmware
+wywołań biblioteki. Program kontrolny ma mapę pamięci tylko do analizy; nie jest firmware
 do wgrania na urządzenie. Pomiary na płytkach korzystają z firmware
 w `tests/device`, opisanego w [testach](testing.md#pomiary-na-urządzeniach).
 
@@ -113,14 +114,16 @@ są narzędziami kontroli jakości, bez udziału w runtime. Wymagania narzędzi
 i osobne kontrole Windows opisują [testy](testing.md) oraz
 [przygotowanie Windows](windows.md).
 
-Unity, cppcheck, PMD oraz toolchainy RISC-V i Xtensa są przypięte w plikach
+Unity, cppcheck, PMD, toolchainy RISC-V i Xtensa oraz najstarszy obsługiwany
+CMake mają piny w plikach
 `*_version.conf` w [third_party](../../third_party), a
 [ensure_tools.sh](../../scripts/ensure_tools.sh) pobiera je, weryfikuje
-i buduje w `.build/tools`. Dla Unity, cppcheck, PMD i toolchainu RISC-V te
+i buduje w `.build/tools`. Dla Unity, cppcheck, PMD, toolchainu RISC-V
+i najstarszego obsługiwanego CMake te
 pliki są jedynymi pinami: JaszczurHAL czyta je ze swojego przypiętego
 checkoutu jhbase zamiast trzymać kopie, więc obie bramki używają jednej
 rewizji każdego narzędzia. Zawierają tylko rewizje i skróty; katalogi
-instalacji wybiera każdy konsument osobno. Toolchain Xtensa służy profilowi
+instalacji wybiera każdy projekt osobno. Toolchain Xtensa służy profilowi
 ESP32-S3. JaszczurHAL dostaje swój kompilator Xtensa razem z ESP-IDF
 i sprawdza, czy ten pin zgadza się z manifestem narzędzi ESP-IDF, bo archiwum
 z pomiarów na urządzeniu linkuje się z firmware ESP-IDF.

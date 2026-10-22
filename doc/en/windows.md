@@ -1,8 +1,7 @@
 # Prepare a Windows test machine
 
-Use a Windows x64 VM with a normal user account, internet access for installation,
-and a writable working directory such as `C:\src`. The existing VM has 4 vCPUs
-and 4 GB RAM; close other programs during installation and builds.
+Use Windows x64 with a normal user account, internet access for installation
+and a writable working directory such as `C:\src`.
 
 ## Build tools
 
@@ -77,14 +76,26 @@ loads the Visual Studio developer-shell module itself.
 
 ## Run the tests
 
-Transfer the complete reviewed source snapshot, including the HAL numeric
-fixture and the pinned Unity sources identified by the dependency checks.
-On Linux, `./scripts/package_windows.sh` creates
-`.build/windows-transfer/jhbase-windows-source.tar.gz` with the current owned
-sources, the HAL fixture and license, the pinned Unity sources under `tools` and
-a SHA-256 manifest. Ignored files, build caches and local access keys are
-excluded. Extract it with Windows `tar` into a writable directory; the bundle
-already has the required sibling layout.
+Prepare the bundle on Linux from the reviewed source snapshot. It needs the
+HAL checkout selected by `JHBASE_HAL_ROOT` (default `../JaszczurHAL`) and three
+dependencies: Unity, utf8proc, and the Unicode normalization corpus with its
+license. Prepare those dependencies explicitly, then package them:
+
+```sh
+./scripts/ensure_tools.sh unity utf8proc unicode-test
+./scripts/package_windows.sh
+```
+
+The result is `.build/windows-transfer/jhbase-windows-source.tar.gz`.
+It contains jhbase sources, the HAL numeric fixture and license, Unity under
+`tools`, and a SHA-256 manifest. The ignored utf8proc checkout, including its
+Git metadata, and the Unicode corpus and license are included explicitly.
+Other ignored files, build caches and local access keys are excluded.
+The packaging script verifies dependencies without downloading them.
+
+Transfer the archive and extract it with Windows `tar` into a new writable
+directory. The bundle already has the required sibling layout. Using a new
+directory keeps objects from a previous snapshot out of the build.
 
 From the `jhbase` directory:
 
@@ -92,10 +103,19 @@ From the `jhbase` directory:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\runalltests.ps1 -HalRoot C:\src\JaszczurHAL -ToolsRoot C:\src\tools
 ```
 
-The runner builds and runs the same CTest suites for x64 and Win32. Select only
-one configuration with `-Architecture x64`. Reports are written below
-`.build/msvc-x64` and `.build/msvc-Win32`, including JUnit XML. It propagates
-configure, build and test errors; no failing configuration is skipped.
+The runner builds and runs CTest with Unicode disabled and enabled on x64 and
+Win32. Every configuration includes `jb::host`. `-Architecture x64` selects
+only x64, retaining both Unicode settings. Each build directory contains its
+JUnit report, `ctest.xml`:
+
+| Architecture | Unicode | Build and report directory |
+| --- | --- | --- |
+| x64 | OFF | `.build/msvc-x64` |
+| x64 | ON | `.build/msvc-x64-unicode` |
+| Win32 | OFF | `.build/msvc-Win32` |
+| Win32 | ON | `.build/msvc-Win32-unicode` |
+
+Configure, build or test errors stop the runner; no failing configuration is skipped.
 
 The [Linux test guide](testing.md) describes sanitizers, Valgrind, fuzzing and
 freestanding compilation. Those checks run separately from native MSVC.

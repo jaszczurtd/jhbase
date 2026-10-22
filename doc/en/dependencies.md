@@ -112,13 +112,14 @@ Unity is a host test dependency. Valgrind, sanitizers, cppcheck and PMD CPD
 are quality tools, not runtime dependencies. Tool requirements and independent
 Windows checks are listed in [testing](testing.md) and [Windows setup](windows.md).
 
-Unity, cppcheck, PMD and the RISC-V and Xtensa toolchains are pinned in the
+Unity, cppcheck, PMD, the RISC-V and Xtensa toolchains and the oldest supported
+CMake are pinned in the
 [third_party](../../third_party) `*_version.conf` files and fetched, verified
 and built below `.build/tools` by [ensure_tools.sh](../../scripts/ensure_tools.sh).
-Those files are the only pins of Unity, cppcheck, PMD and the RISC-V
-toolchain: JaszczurHAL reads them from its pinned jhbase checkout instead of
+Those files are the only pins of Unity, cppcheck, PMD, the RISC-V
+toolchain and the oldest supported CMake: JaszczurHAL reads them from its pinned jhbase checkout instead of
 keeping copies, so both gates run one revision of each tool. They carry
-revisions and digests only; each consumer chooses its own install directories.
+revisions and digests only; each project chooses its own install directories.
 The Xtensa toolchain serves the ESP32-S3 profile. JaszczurHAL gets its Xtensa
 compiler through ESP-IDF and checks that this pin matches the ESP-IDF tools
 manifest, because the device archive links into ESP-IDF firmware.

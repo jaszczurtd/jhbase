@@ -6,9 +6,9 @@ storage. Include [utf8.h](../../include/jb/utf8.h) for text operations and
 [json.h](../../include/jb/json.h) for JSON. Both headers also work in C++17.
 
 For exact conversions and C literals, see [numbers](numbers.md).
-For sequential output, see [the writer](writer.md). JSON Pointer is described
-below; JSON Schema remains outside this prototype. Optional NFC is described below. Build instructions and platform limits
-are in [the test guide](testing.md).
+For sequential output, see [the writer](writer.md). JSON Pointer and optional
+Unicode normalization are described below. JSON Schema remains outside this
+library. Build instructions and platform limits are in [the test guide](testing.md).
 
 ## Common rules
 
@@ -121,6 +121,12 @@ hal_status_t example_first_scalar(const char *text, size_t length,
 ```
 
 ## Unicode
+
+NFC (Normalization Form C) gives equivalent Unicode character sequences a
+common representation. For example, `e` followed by U+0301 and U+00E9 both
+become the UTF-8 bytes for `é`. Use it explicitly when an application needs
+to compare or store text in this form; JSON parsing keeps names and strings
+as supplied. NFC does not change case or apply compatibility mappings.
 
 Build with `-DJHBASE_UNICODE=ON`, include [unicode.h](../../include/jb/unicode.h)
 and link `jb::unicode`. `jb_unicode_version()` returns the library-owned
@@ -248,7 +254,7 @@ collide in the same object. Names are not normalized to NFC.
 
 limits and `out_doc` are required; `error` is optional. `tokens` may be `NULL`
 only at zero capacity, which cannot hold a valid document. `token_capacity`
-counts records, not bytes: use `COUNTOF(tokens)` from the HAL array header.
+counts records, not bytes: use `COUNTOF(tokens)` from `jb/array.h`.
 Input and scratch allow `NULL` only at zero length/size.
 
 `HAL_OK` publishes a valid document. `HAL_EPROTO` rejects the input,

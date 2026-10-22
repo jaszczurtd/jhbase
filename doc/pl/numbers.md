@@ -1,27 +1,29 @@
 # Dokładne liczby i literały C
 
 Do odczytu liczb dołącz [json_number.h](../../include/jb/json_number.h), a do
-zapisu C — [literal.h](../../include/jb/literal.h). Funkcje przyjmują węzły
+zapisu literałów C dołącz [literal.h](../../include/jb/literal.h). Funkcje przyjmują węzły
 z poprawnie sparsowanego dokumentu; wejście i tokeny muszą pozostać dostępne
 i niezmienione. Parser zachowuje oryginalne tokeny liczb, także wartości
-spoza zakresu natywnych integerów i typów zmiennoprzecinkowych.
+spoza zakresu natywnych typów całkowitych i zmiennoprzecinkowych.
 
-## Odczyt integerów
+<a id="odczyt-integerów"></a>
+
+## Odczyt liczb całkowitych
 
 | Funkcja | Wynik |
 | --- | --- |
-| `jb_json_get_u64(node, out)` | Odczytuje dokładny integer jako `uint64_t`. Ujemna wartość niezerowa i wartość powyżej `UINT64_MAX` dają `HAL_EOVERFLOW`. |
-| `jb_json_get_i64(node, out)` | Odczytuje dokładny integer jako `int64_t`, także `INT64_MIN`; przekroczenie zakresu daje `HAL_EOVERFLOW`. |
-| `jb_json_number_is_integer(node, out)` | Sprawdza, czy wartość dziesiętna jest całkowita, nawet gdy nie mieści się w natywnym integerze. |
+| `jb_json_get_u64(node, out)` | Odczytuje dokładną liczbę całkowitą jako `uint64_t`. Ujemna wartość niezerowa i wartość powyżej `UINT64_MAX` dają `HAL_EOVERFLOW`. |
+| `jb_json_get_i64(node, out)` | Odczytuje dokładną liczbę całkowitą jako `int64_t`, także `INT64_MIN`; przekroczenie zakresu daje `HAL_EOVERFLOW`. |
+| `jb_json_number_is_integer(node, out)` | Sprawdza, czy wartość dziesiętna jest całkowita, nawet gdy nie mieści się w natywnym typie całkowitym. |
 
 Wszystkie wskaźniki wynikowe są wymagane. `HAL_ETYPE` oznacza niewłaściwy typ
-JSON lub próbę odczytu wartości ułamkowej jako integera. `HAL_EINVAL` oznacza
+JSON lub próbę odczytu wartości ułamkowej jako liczby całkowitej. `HAL_EINVAL` oznacza
 błędne argumenty, a `HAL_ESTATE` niepoprawny węzeł. Wyjścia zmieniają się
 wyłącznie po sukcesie.
 
-`100`, `100.0` i `1e2` dają integer 100. `1.5` zostaje odrzucone bez
+`100`, `100.0` i `1e2` dają liczbę całkowitą 100. `1.5` zostaje odrzucone bez
 zaokrąglania. `-0`, także z ogromnym wykładnikiem, daje zero. Nie ma niejawnej
-konwersji booleanów ani stringów. Odczyty nie potrzebują dodatkowego scratch;
+konwersji wartości logicznych ani stringów. Odczyty nie potrzebują dodatkowego scratch;
 czas przeglądania ogranicza limit długości tokenu liczby w parserze.
 
 ```c
@@ -33,7 +35,7 @@ if (status != HAL_OK) {
 ```
 
 Kompletny [przykład liczbowy](../../examples/json_numbers.c) odczytuje pełny
-zakres unsigned 64-bit bez wcześniejszej zamiany na `double`.
+zakres 64-bitowych liczb bez znaku bez wcześniejszej zamiany na `double`.
 
 ## Dokładne porównanie
 
@@ -60,8 +62,8 @@ i `1e0` uznaje za równe. Ogromne wykładniki są porównywane bez rozwijania ic
 wartości w olbrzymich buforach. Scratch może być niewyrównaną pamięcią bajtową.
 Scratch i wynik nie mogą nakładać się na siebie ani na oba dokumenty.
 Brak scratch lub wyczerpanie budżetu daje `HAL_EOVERFLOW`; zero nie dopuszcza
-żadnej pracy. Liczony jest każdy krok na cyfrze lub limbie. `out_order`
-zmienia się wyłącznie po sukcesie.
+żadnej pracy. Budżet obejmuje każdy krok na cyfrze lub fragmencie dużej liczby
+(limbie). `out_order` zmienia się wyłącznie po sukcesie.
 
 ## Konwersja IEEE
 
@@ -79,7 +81,7 @@ zmienia się wyłącznie po sukcesie.
 Zaokrąglanie wybiera najbliższą wartość, a przy remisie parzystą mantysę,
 niezależnie od locale i bieżącego trybu FPU. Odczyty natywne kopiują
 reprezentację po sprawdzeniu formatu IEEE podczas kompilacji. Obsługiwane są
-wartości subnormalne. Przepełnienie do infinity zawsze daje `HAL_EOVERFLOW`;
+wartości subnormalne. Przepełnienie do nieskończoności zawsze daje `HAL_EOVERFLOW`;
 wyjścia pozostają bez zmian.
 
 `jb_json_float_options_t` określa dwie niezależne zasady obsługi zera i skończony
@@ -106,22 +108,22 @@ normalizację.
 ## Literały C
 
 `jb_c_literal_workspace_size(node, type, out_bytes)` oblicza scratch; literały
-integer, boolean i string potrzebują zero bajtów. Literały zmiennoprzecinkowe
+dla liczb całkowitych, wartości logicznych i stringów nie potrzebują scratch. Literały zmiennoprzecinkowe
 korzystają ze wspólnego scratch dokładnej konwersji i formatowania.
 `jb_c_literal(node, type, work, max_work, buffer, capacity, required)` zapisuje
 literał bez terminatora.
 
 | Selektor | Zapis C |
 | --- | --- |
-| `JB_C_BOOL` | `1` lub `0`; wymaga booleana JSON. |
-| `JB_C_U8`, `JB_C_U16`, `JB_C_U32` | Sprawdzony zakres unsigned i suffix `U`. |
-| `JB_C_U64` | Pełny zakres unsigned i suffix `ULL`. |
-| `JB_C_I8`, `JB_C_I16`, `JB_C_I32` | Sprawdzony zakres signed; wartości ujemne w nawiasach. |
-| `JB_C_I64` | Sprawdzony zakres signed i suffix `LL`. |
+| `JB_C_BOOL` | `1` lub `0`; wymaga wartości logicznej JSON. |
+| `JB_C_U8`, `JB_C_U16`, `JB_C_U32` | Sprawdza zakres liczby bez znaku i dodaje sufiks `U`. |
+| `JB_C_U64` | Pełny zakres 64-bitowych liczb bez znaku i sufiks `ULL`. |
+| `JB_C_I8`, `JB_C_I16`, `JB_C_I32` | Sprawdza zakres liczby ze znakiem; wartości ujemne zapisuje w nawiasach. |
+| `JB_C_I64` | Sprawdza zakres 64-bitowej liczby ze znakiem i dodaje sufiks `LL`. |
 | `JB_C_F32`, `JB_C_F64` | Jedno dokładne zaokrąglenie IEEE, potem 9/17 cyfr znaczących w notacji naukowej. |
 | `JB_C_STRING` | Bajty UTF-8 w cudzysłowach; bajty spoza ASCII i sterujące mają trzycyfrowe escape'y ósemkowe. |
 
-Minima signed mają postać odejmowania, np. `(-2147483647 - 1)` oraz
+Najmniejsze wartości typów ze znakiem mają postać odejmowania, np. `(-2147483647 - 1)` oraz
 `(-9223372036854775807LL - 1LL)`. Literały zmiennoprzecinkowe odrzucają
 przepełnienie i zaokrąglenie niezerowej wartości do zera, normalizują ujemne
 zero i obejmują wartości ujemne nawiasami. Dla binary32 `0.22` wynikiem jest
@@ -141,5 +143,5 @@ hal_status_t status = jb_c_literal(gain_node, JB_C_F32, work, 1000000,
 Wskaźnik `required` jest wymagany. Za mały bufor, także `(NULL, 0)`, otrzymuje
 pełną wymaganą długość i daje `HAL_EOVERFLOW` bez zapisu. Pozostałe błędy
 zachowują oba wyjścia. Niewłaściwy typ lub ułamek daje `HAL_ETYPE`; zakres,
-wyczerpanie pracy lub scratch — `HAL_EOVERFLOW`. Kompletny przykład liczbowy
+wyczerpanie budżetu pracy lub scratch daje `HAL_EOVERFLOW`. Kompletny przykład liczbowy
 sprawdza zarówno bity, jak i wygenerowany literał.

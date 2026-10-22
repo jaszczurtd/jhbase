@@ -13,7 +13,7 @@ ctest --test-dir .build/host --output-on-failure
 ```
 
 Install normally with `cmake --install`. The exported package provides
-`jb::host` when built with this option; a C consumer also needs the C++ linker
+`jb::host` when built with this option; a C application also needs the C++ linker
 and runtime. The status-only package carries no host code.
 
 ## Reading and paths
@@ -28,14 +28,14 @@ nonregular files give `HAL_ETYPE`. `jb_file_release(NULL)` is allowed.
 `jb_path_resolve(base, path, buffer, capacity, required)` requires an explicit
 absolute base. It joins and normalizes path components without looking up
 links or changing cwd. Paths use host filesystem rules and UTF-8; Windows
-converts them to native wide paths. Drive-relative Windows paths are rejected.
-`(NULL,0)` measures the result INCLUDING its NUL terminator. A short buffer
+converts them to UTF-16 paths for the system API. Drive-relative Windows paths
+are rejected. `(NULL,0)` measures the result including its NUL terminator. A short buffer
 gives `HAL_EOVERFLOW`, reports the full size and leaves every byte untouched.
 
 ## Comparing and publishing
 
-`jb_file_write_atomic(path, data, length, check_only, changed)` compares complete
-bytes first. Identical files retain their mtime. Check mode sets `changed` for
+`jb_file_write_atomic(path, data, length, check_only, changed)` first compares
+the entire contents byte for byte. Identical files retain their mtime. Check mode sets `changed` for
 a missing or different output and creates no directories or temporary files.
 The caller decides whether that difference should cause a failing check.
 
@@ -55,7 +55,7 @@ bytes are visible but their durability was not confirmed. An error does not
 roll back newly created parent directories. Filesystem and sharing limits
 still apply.
 
-All functions return the shared `hal_status_t`. Invalid UTF-8 gives
+Functions that can fail return the shared `hal_status_t`. Invalid UTF-8 gives
 `HAL_EPROTO`, allocation failure `HAL_ENOMEM`, file limits `HAL_EOVERFLOW`,
 missing input `HAL_ENOENT` and access denial `HAL_EPERM`; other I/O failures
 give `HAL_EIO` or `HAL_EBUSY`. A held Windows replacement target can also

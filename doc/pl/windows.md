@@ -1,9 +1,7 @@
 # Przygotowanie maszyny Windows do testów
 
-Przygotuj VM z Windows x64, zwykłym kontem użytkownika, dostępem do internetu
+Przygotuj Windows x64 ze zwykłym kontem użytkownika, dostępem do internetu
 na czas instalacji i katalogiem roboczym z prawem zapisu, np. `C:\src`.
-Istniejąca VM ma 4 vCPU i 4 GB RAM; na czas instalacji i budowania zamknij
-pozostałe programy.
 
 ## Narzędzia do budowania
 
@@ -77,14 +75,26 @@ w PATH zwykłego terminala: runner sam ładuje moduł developer shell Visual Stu
 
 ## Uruchomienie testów
 
-Prześlij kompletną migawkę sprawdzanych źródeł wraz z fixture liczb HAL
-i przypiętymi źródłami Unity wskazanymi przez kontrole zależności.
-Na Linuksie `./scripts/package_windows.sh` tworzy
-`.build/windows-transfer/jhbase-windows-source.tar.gz` z bieżącymi własnymi
-źródłami, fixture i licencją HAL, przypiętymi źródłami Unity w katalogu
-`tools` i manifestem SHA-256. Pliki ignorowane, cache buildów i lokalne klucze
-dostępu są pomijane. Rozpakuj archiwum przez windowsowe `tar` do katalogu
-z prawem zapisu; paczka ma już wymagany układ sąsiednich katalogów.
+Przygotuj paczkę na Linuksie ze sprawdzanej migawki źródeł. Potrzebuje ona
+checkoutu HAL wskazanego przez `JHBASE_HAL_ROOT` (domyślnie `../JaszczurHAL`)
+oraz trzech zależności: Unity, utf8proc i zestawu danych do testów normalizacji
+Unicode wraz z licencją. Najpierw przygotuj te zależności, a potem je spakuj:
+
+```sh
+./scripts/ensure_tools.sh unity utf8proc unicode-test
+./scripts/package_windows.sh
+```
+
+Wynikiem jest `.build/windows-transfer/jhbase-windows-source.tar.gz`.
+Archiwum zawiera źródła jhbase, fixture liczb i licencję HAL, Unity w katalogu
+`tools` oraz manifest SHA-256. Ignorowany checkout utf8proc z metadanymi Git,
+dane Unicode i ich licencja są dołączane jawnie. Pozostałe pliki ignorowane,
+cache buildów i lokalne klucze dostępu są pomijane. Skrypt pakujący sprawdza
+zależności, ale ich nie pobiera.
+
+Prześlij archiwum i rozpakuj je przez windowsowe `tar` do nowego katalogu
+z prawem zapisu. Paczka ma już wymagany układ sąsiednich katalogów. Nowy
+katalog zapobiega wykorzystaniu obiektów z poprzedniej migawki źródeł.
 
 Z katalogu `jhbase` uruchom:
 
@@ -92,10 +102,20 @@ Z katalogu `jhbase` uruchom:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\runalltests.ps1 -HalRoot C:\src\JaszczurHAL -ToolsRoot C:\src\tools
 ```
 
-Runner buduje i uruchamia te same zestawy CTest dla x64 i Win32. Jedną
-konfigurację można wybrać przez `-Architecture x64`. Raporty, w tym JUnit XML,
-powstają w `.build/msvc-x64` i `.build/msvc-Win32`. Błąd konfiguracji, buildu
-lub testu przerywa przebieg; żadna niesprawna konfiguracja nie jest pomijana.
+Runner buduje i uruchamia CTest z Unicode wyłączonym i włączonym na x64
+oraz Win32. Każda konfiguracja zawiera `jb::host`. `-Architecture x64`
+wybiera samo x64, zachowując oba ustawienia Unicode. Każdy katalog buildu
+zawiera raport JUnit `ctest.xml`:
+
+| Architektura | Unicode | Katalog buildu i raportu |
+| --- | --- | --- |
+| x64 | OFF | `.build/msvc-x64` |
+| x64 | ON | `.build/msvc-x64-unicode` |
+| Win32 | OFF | `.build/msvc-Win32` |
+| Win32 | ON | `.build/msvc-Win32-unicode` |
+
+Błąd konfiguracji, buildu lub testu przerywa przebieg;
+żadna niesprawna konfiguracja nie jest pomijana.
 
 [Opis testów Linuksa](testing.md) obejmuje sanitizery, Valgrind, fuzzing
 i kompilację freestanding. Te kontrole działają osobno od natywnego MSVC.

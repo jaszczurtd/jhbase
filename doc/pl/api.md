@@ -3,18 +3,21 @@
 jhbase sprawdza UTF-8, odczytuje wartości skalarne Unicode i udostępnia JSON
 przez niemodyfikowalne węzły. Przenośna implementacja jest w C11 i korzysta
 z pamięci wywołującego. Operacje tekstowe deklaruje
-[utf8.h](../../include/jb/utf8.h), a JSON - [json.h](../../include/jb/json.h).
+[utf8.h](../../include/jb/utf8.h), a operacje JSON deklaruje
+[json.h](../../include/jb/json.h).
 Oba nagłówki można również dołączać z C++17.
 
 Dokładne konwersje i literały C opisuje [moduł liczb](numbers.md),
-a zapis sekwencyjny - [writer](writer.md). JSON Pointer opisano niżej;
-JSON Schema pozostaje poza obecnym zakresem. Opcjonalne NFC opisano niżej. Sposób kompilacji i ograniczenia platform
-opisano w [dokumencie o testach](testing.md).
+a zapis sekwencyjny opisuje [writer](writer.md). JSON Pointer i opcjonalną
+normalizację Unicode opisano niżej. JSON Schema pozostaje poza zakresem tej
+biblioteki. Sposób kompilacji i ograniczenia platform opisuje
+[dokument o testach](testing.md).
 
 ## Wspólne zasady
 
 Długości i pojemności są podawane w bajtach, chyba że parametr jawnie liczy
-tokeny lub elementy tablicy. Span nie oznacza stringa zakończonego NUL.
+tokeny lub elementy tablicy. Span określa wskaźnik i długość danych;
+nie wymaga terminatora NUL.
 UTF-8 i zdekodowane stringi JSON mogą zawierać U+0000; korzystaj z ich
 długości zamiast `strlen()`.
 
@@ -33,8 +36,8 @@ Przykłady z buforami statycznymi mają jednego właściciela.
 ## UTF-8
 
 Wartość skalarna Unicode (Unicode scalar value) to punkt kodowy od U+0000
-do U+10FFFF, z wyłączeniem surrogatów U+D800-U+DFFF. Funkcje odrzucają kodowania nadmiarowe, błędne
-continuation bytes i wartości spoza zakresu. Nie normalizują tekstu
+do U+10FFFF, z wyłączeniem surrogatów U+D800-U+DFFF. Funkcje odrzucają
+kodowania nadmiarowe, błędne bajty kontynuacji i wartości spoza zakresu. Nie normalizują tekstu
 i nie liczą klastrów grafemów.
 
 ### `jb_utf8_decode`
@@ -89,8 +92,8 @@ długości i pozostawia `error_offset` bez zmian.
 **Przykład: walidacja tekstu i ponowne zakodowanie pierwszego znaku**
 
 Dla bajtów E2 82 AC, po których występuje A, wynikiem jest trzybajtowy
-znak euro. Błędny suffix przerywa walidację, nawet gdy pierwsza wartość skalarna jest
-poprawna. Puste wejście przechodzi walidację, ale decode zwraca `HAL_EPROTO`.
+znak euro. Błędne dalsze bajty przerywają walidację, nawet gdy pierwsza
+wartość skalarna jest poprawna. Puste wejście przechodzi walidację, ale decode zwraca `HAL_EPROTO`.
 
 ```c
 #include <jb/utf8.h>
@@ -125,6 +128,13 @@ hal_status_t example_first_scalar(const char *text, size_t length,
 
 ## Unicode
 
+NFC (Normalization Form C) nadaje równoważnym sekwencjom znaków Unicode
+wspólną postać. Na przykład `e` z następującym po nim U+0301 oraz U+00E9
+dają te same bajty UTF-8 znaku `é`. Wywołaj normalizację jawnie, gdy
+aplikacja potrzebuje takiego zapisu do porównywania lub przechowywania
+tekstu. Parser JSON zachowuje otrzymane nazwy i stringi. NFC nie zmienia
+wielkości liter ani nie wykonuje przekształceń zgodnościowych.
+
 Ustaw `-DJHBASE_UNICODE=ON`, dołącz [unicode.h](../../include/jb/unicode.h)
 i linkuj `jb::unicode`. `jb_unicode_version()` zwraca należący do biblioteki
 tekst z wersją danych Unicode. Parser JSON nie włącza normalizacji
@@ -140,15 +150,15 @@ hal_status_t jb_unicode_nfc(const char *input, size_t length, int32_t *scratch,
 
 Podawaj dokładną liczbę bajtów UTF-8, także przy wewnętrznym NUL. Najpierw
 wyznacz miejsce: `required` liczy elementy `int32_t`, z miejscem na terminator,
-i wynosi co najmniej jeden nawet dla pustego wejścia. Przekaż prawdziwą,
+i wynosi co najmniej jeden nawet dla pustego wejścia. Przekaż rzeczywistą,
 naturalnie wyrównaną tablicę `int32_t`, oddzielną od wejścia. Nie ma alokacji.
 Wynik zajmuje scratch jako bajty UTF-8 z dodatkowym NUL; `out_length` nie
 liczy tego bajtu. Odczytuj go tylko przez zwrócony wskaźnik znakowy i skopiuj
 przed ponownym użyciem scratch. Kolejne wywołanie ponownie inicjalizuje
 elementy jako `int32_t`. Wejście, scratch i obiekty wynikowe nie mogą się nakładać.
 
-`max_work` ogranicza `length + n + n*n`, gdzie `n` to liczba znaków po
-dekompozycji. To zachowawcze oszacowanie ogranicza porządkowanie znaków
+`max_work` ogranicza `length + n + n*n`, gdzie `n` to liczba wartości
+skalarnych po dekompozycji. To zachowawcze oszacowanie ogranicza porządkowanie znaków
 łączących przed wywołaniem upstream; nie jest timeoutem. `HAL_EOVERFLOW`
 oznacza limit pracy, pojemności lub rozmiaru; `HAL_EPROTO` błędne UTF-8;
 `HAL_EINVAL` błędne wskaźniki, wyrównanie lub nakładanie wejścia i scratch;
@@ -184,7 +194,8 @@ znaków. Piny, licencje i koszt tabel opisuje dokument o
 W JSON wartość prosta oznacza null, boolean, liczbę lub string.
 Token reprezentuje wartość. Na przykład `{"a": 1}` wymaga dwóch tokenów:
 obiektu oraz wartości jego pola. Token wartości zawiera też nazwę pola.
-Tokeny występują w kolejności preorder, a root ma indeks zero. Brak rodzica,
+Tokeny występują w kolejności preorder: rodzic przed potomkami. Korzeń ma
+indeks zero. Brak rodzica,
 pierwszego dziecka lub następnego rodzeństwa oznacza `JB_JSON_NODE_NONE`,
 równe `SIZE_MAX`.
 
@@ -198,7 +209,7 @@ Wejście i tokeny muszą istnieć i pozostać niezmienione podczas używania
 dokumentu. Węzeł odwołuje się również do samego obiektu dokumentu:
 nie można zwrócić węzła wskazującego lokalny dokument. Ponowne użycie tablicy
 tokenów unieważnia wcześniejsze dokumenty, które z niej korzystają.
-Biblioteka nie udostępnia destroy dla pamięci należącej do wywołującego.
+Biblioteka nie udostępnia funkcji zwalniania pamięci należącej do wywołującego.
 
 Scratch parsera można wykorzystać ponownie od razu po parsowaniu.
 Może to być statyczna tablica `unsigned char` o dowolnym wyrównaniu.
@@ -212,9 +223,9 @@ zero danych lub pracy; nie oznacza braku ograniczeń.
 
 | Pole | Co ogranicza |
 | --- | --- |
-| `max_input_bytes` | Całe wejście, także whitespace przed wartością i po niej. |
-| `max_nodes` | Wszystkie tokeny wartości, łącznie z root. |
-| `max_depth` | Jednocześnie otwarte tablice i obiekty; wartość prosta jako root ma głębokość zero. |
+| `max_input_bytes` | Całe wejście, także białe znaki przed wartością i po niej. |
+| `max_nodes` | Wszystkie tokeny wartości, łącznie z korzeniem. |
+| `max_depth` | Jednocześnie otwarte tablice i obiekty; wartość prosta jako korzeń ma głębokość zero. |
 | `max_string_bytes` | Zdekodowane bajty UTF-8 jednego stringa lub nazwy pola. |
 | `max_number_bytes` | Bajty jednego oryginalnego tokenu liczby. |
 | `max_members` | Bezpośrednie dzieci każdej tablicy lub obiektu. |
@@ -251,16 +262,16 @@ hal_status_t jb_json_parse(jb_json_span_t input, const jb_json_limits_t *limits,
                           jb_json_error_t *error);
 ```
 
-Parsuje dokładnie jedną pełną wartość z opcjonalnym otaczającym whitespace
-JSON. Akceptuje także scalar jako root. Odrzuca komentarze, trailing commas,
-BOM, NaN, Infinity, błędne UTF-8, escape'y, nieparzyste surrogaty i dodatkowe
-dane. Nazwy pól muszą być unikalne po zdekodowaniu escape'ów:
+Parsuje dokładnie jedną pełną wartość z opcjonalnymi białymi znakami JSON
+przed nią i po niej. Korzeniem może być także wartość prosta. Funkcja odrzuca
+komentarze, przecinki po ostatnim elemencie, BOM, NaN, Infinity, błędne UTF-8,
+sekwencje escape, surrogaty nietworzące poprawnej pary i dodatkowe dane. Nazwy pól muszą być unikalne po zdekodowaniu escape'ów:
 `"a"` i `"\u0061"` kolidują w jednym obiekcie. Nazwy nie są normalizowane do NFC.
 
 `limits` i `out_doc` są wymagane, a `error` opcjonalne. `tokens` może być `NULL`
 tylko przy zerowej pojemności, która nie pomieści poprawnego dokumentu.
-`token_capacity` liczy rekordy, nie bajty: używaj `COUNTOF(tokens)` z nagłówka
-tablic HAL. Wejście i scratch dopuszczają `NULL` tylko przy zerowej długości
+`token_capacity` liczy rekordy, nie bajty: używaj `COUNTOF(tokens)`
+z `jb/array.h`. Wejście i scratch dopuszczają `NULL` tylko przy zerowej długości
 lub zerowym rozmiarze.
 
 `HAL_OK` udostępnia poprawny dokument. `HAL_EPROTO` oznacza odrzucone wejście,
@@ -272,7 +283,8 @@ zawierać częściowy wynik. Nie wykonuj na nim nawigacji.
 
 Dla `{"enabled": true}` i jego długości w bajtach funkcja zapisuje `true`
 w `out_enabled`. Brak pola daje `HAL_ENOENT`, a `{"enabled": "true"}` daje
-`HAL_ETYPE`. Helper zwraca wyłącznie skopiowany boolean, więc nie udostępnia
+`HAL_ETYPE`. Funkcja przykładowa zwraca wyłącznie skopiowaną wartość logiczną,
+więc nie udostępnia
 węzła zależnego od lokalnego dokumentu. Przed parsowaniem sprawdza
 zapotrzebowanie implementacji na scratch.
 
@@ -345,7 +357,7 @@ Wynikowe wymagania zmieniają się wyłącznie przy sukcesie.
 
 **Przykład: pomiar i alokacja tokenów na hoście**
 
-Helper alokuje tylko tokeny; scratch pozostaje statyczny i ma jednego
+Funkcja przykładowa alokuje tylko tokeny; scratch pozostaje statyczny i ma jednego
 właściciela. Przed `malloc` sprawdza mnożenie rozmiarów, po użyciu zwalnia
 tokeny i udostępnia liczbę dopiero po udanym parse. Dokument z duplikatami
 może przejść measure, a następnie nie przejść parse. W firmware zwykle
@@ -477,7 +489,7 @@ obiektach.
 
 **Przykład: podsumowanie tablicy boolean**
 
-Dla `{"flags": [true, false, true]}` helper podaje łącznie 3 elementy,
+Dla `{"flags": [true, false, true]}` funkcja podaje łącznie 3 elementy,
 w tym 2 `true`. Dla pustej tablicy oba wyniki wynoszą zero. Element innego
 typu przerywa działanie bez udostępnienia wyników. `HAL_ENOENT` z first/next
 oznacza normalny koniec iteracji, a `HAL_ENOENT` z find brak wymaganego
@@ -549,7 +561,7 @@ Indeks poza zakresem daje `HAL_ENOENT`, a wartość inna niż tablica `HAL_ETYPE
 Funkcja przegląda wcześniejsze rodzeństwo, więc koszt jest liniowy względem
 `position`. Do pełnej iteracji używaj first/next zamiast powtarzanych at.
 
-**Przykład: wybór jednego boolean**
+**Przykład: wybór jednej wartości logicznej**
 
 Dla `{"flags": [true, false]}` pozycja 1 daje `false`, a pozycja 2 `HAL_ENOENT`.
 
@@ -597,14 +609,15 @@ hal_status_t jb_json_number_token(jb_json_node_t node, jb_json_span_t *out);
 Udostępnia oryginalny zapis liczby. Wskaźnik `out` jest wymagany. Inny typ,
 także boolean lub string z liczbą, daje `HAL_ETYPE`.
 
-Funkcja nie konwertuje do integer ani typu zmiennoprzecinkowego.
+Funkcja nie konwertuje wartości do liczby całkowitej ani typu
+zmiennoprzecinkowego.
 18446744073709551615, 9007199254740993.0 i 1e400 pozostają dokładnymi
 bajtami wejścia, jeśli mieszczą się w jego limitach. Funkcja nie rozstrzyga,
 czy token mieści się w konkretnym typie liczbowym C.
 
 **Przykład: zachowanie zapisu identyfikatora liczbowego**
 
-Dla `{"id": 1.8446744073709551615e19}` helper kopiuje dokładnie taki zapis.
+Dla `{"id": 1.8446744073709551615e19}` funkcja kopiuje dokładnie taki zapis.
 Wynik ma jawną długość i nie ma terminatora. Span jest używany tylko wtedy,
 gdy `doc` i jego wejście nadal istnieją.
 
@@ -660,7 +673,7 @@ hal_status_t jb_json_string_copy(jb_json_node_t node, char *buffer,
 ```
 
 Dekoduje string do bajtów UTF-8, bez cudzysłowów i terminatora.
-Rozwija escape'y i pary surrogate; `"\u0000"` daje wewnętrzny NUL.
+Rozwija sekwencje escape i pary surrogatów; `"\u0000"` daje wewnętrzny NUL.
 Wskaźnik `required` jest wymagany; podana długość nie obejmuje terminatora.
 
 (`NULL`, 0) wykonuje pomiar i daje `HAL_OK`. Za mały rzeczywisty bufor daje
@@ -746,7 +759,7 @@ hal_status_t jb_json_string_equal(jb_json_node_t node, jb_json_span_t value,
                                  bool *out);
 ```
 
-Porównuje string z bajtami UTF-8 po rozwinięciu escape'ów i par surrogate,
+Porównuje string z bajtami UTF-8 po rozwinięciu sekwencji escape i par surrogatów,
 bez kopiowania, NFC ani case folding. `value` nie jest składnią JSON:
 zapisane `"a"` równa się jednobajtowej wartości `a`. Może zawierać NUL,
 a (`NULL`, 0) oznacza pusty string. Wskaźnik `out` jest wymagany i otrzymuje
@@ -778,9 +791,9 @@ daje `HAL_EINVAL`.
 ## JSON Pointer
 
 [json_pointer.h](../../include/jb/json_pointer.h) wyszukuje wartość według
-zwykłej ścieżki UTF-8 z [RFC 6901](https://www.rfc-editor.org/rfc/rfc6901)
+ścieżki UTF-8 z [RFC 6901](https://www.rfc-editor.org/rfc/rfc6901)
 i zapisuje ścieżkę istniejącego węzła. Linkuj `jb::base`; linker pomija
-nieużywany kod pointer. Obie operacje używają stałej ilości stosu,
+nieużywany kod JSON Pointer. Obie operacje używają stałej ilości stosu,
 bez heap ani scratch. Obowiązują zwykłe zasady czasu życia dokumentu
 i zakaz nakładania buforów.
 
@@ -791,7 +804,7 @@ hal_status_t jb_json_pointer_copy(jb_json_node_t node, char *buffer,
                                   size_t capacity, size_t *required);
 ```
 
-`get` zaczyna od root. Pusty span wybiera root, a `/` pustą nazwę pola.
+`get` zaczyna od korzenia. Pusty span wybiera korzeń, a `/` pustą nazwę pola.
 `~0` oznacza `~`, a `~1` oznacza `/`, więc `/a~1b` wybiera `a/b`,
 a `/~01` wybiera `~1`. Nazwy są porównywane po dekodowaniu JSON, bez NFC
 ani case folding. NUL jest częścią nazwy; podawaj jawną liczbę bajtów.
@@ -799,7 +812,7 @@ Fragmenty URI takie jak `#/foo` i stringi w cudzysłowach JSON wymagają
 wcześniejszego dekodowania przez wywołującego.
 
 Indeksy tablic mają cyfry dziesiętne bez zer wiodących. Błędny zapis,
-escape pointer lub UTF-8 daje `HAL_EPROTO`; składnia całej ścieżki jest
+sekwencja escape w JSON Pointer lub UTF-8 daje `HAL_EPROTO`; składnia całej ścieżki jest
 sprawdzana przed wyszukiwaniem. Brak pola, indeks poza tablicą i `-` dają
 `HAL_ENOENT`, także gdy indeks liczbowy nie mieści się w słowie maszynowym.
 Nazwy obiektu takie jak `01` i `-` są dosłowne. Przechodzenie przez wartość
@@ -808,13 +821,13 @@ prostą daje `HAL_ETYPE`; błędny dokument `HAL_ESTATE`, błędne wskaźniki
 pól i elementów jest liniowe; wywołujący ogranicza powtarzane wyszukiwania.
 
 `copy` zapisuje zwykłe UTF-8 bez terminatora; `required` liczy bajty,
-także wewnętrzny NUL. `(NULL,0)` mierzy, a root wymaga zera bajtów.
+także wewnętrzny NUL. `(NULL,0)` mierzy, a korzeń wymaga zera bajtów.
 Za mały bufor daje `HAL_EOVERFLOW`, pozostaje bez zmian, a `required`
 podaje pełny rozmiar. Inne błędy zachowują `required`. Funkcja dwa razy
 przechodzi po rodzicach, przegląda rodzeństwo dla indeksów tablic i używa
 wspólnego dekodera JSON dla nazw, kodując tylko `/` i `~`.
 
-Dla `{"flags":[true,false]}` poniższy helper odczytuje `false`
+Dla `{"flags":[true,false]}` poniższa funkcja odczytuje `false`
 z ośmiobajtowej ścieżki `/flags/1`.
 
 ```c
@@ -891,7 +904,8 @@ hal_status_t jb_json_locate(jb_json_span_t input, size_t offset,
 Przelicza `offset` bajtowy, także EOF, na linię i kolumnę bajtową liczone
 od jedynki. Tylko LF rozpoczyna nową linię; CR jest liczony jako bajt.
 Kolumna nie jest pozycją na ekranie ani liczbą znaków Unicode.
-Funkcja przegląda prefix, nie wymagając poprawnego JSON ani UTF-8.
+Funkcja przegląda bajty przed wskazaną pozycją, nie wymagając poprawnego
+JSON ani UTF-8.
 
 Oba wyjścia są wymagane. `HAL_EINVAL` oznacza `offset` za końcem wejścia,
 brak `input` przy niezerowej długości albo brak wskaźnika wynikowego. Przepełnienie
@@ -899,8 +913,9 @@ licznika daje `HAL_EOVERFLOW`. Przy błędzie oba wyjścia pozostają bez zmian.
 
 **Przykład: lokalizacja błędu JSON**
 
-Po trailing comma w poniższym wejściu występuje zamykający nawias obiektu
-w linii 3, kolumnie bajtowej 1. Helper wypisuje tę lokalizację i zwraca
+Po przecinku za ostatnim elementem w poniższym wejściu występuje zamykający
+nawias obiektu w linii 3, kolumnie bajtowej 1. Funkcja wypisuje tę lokalizację
+i zwraca
 oryginalny `HAL_EPROTO`. Przy duplikatach można osobno przekazać
 `related_offset` do locate.
 

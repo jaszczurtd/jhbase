@@ -2,17 +2,18 @@
 
 Otwórz katalog główny repozytorium jako folder roboczy. Zadania odpowiadają
 projektom JaszczurHAL: te same etykiety i skróty, to samo miejsce na stan
-lokalny i generowane dane IntelliSense. Zamiast pythonowego punktu wejścia
-projektów firmware wszystkim steruje jeden skrypt CMake, więc zadania działają
-tak samo na Linuksie, macOS i Windows: `scripts/vscode_workspace.cmake`.
+lokalny i generowane dane IntelliSense. Zadania budowania, testowania
+i instalacji korzystają z `scripts/vscode_workspace.cmake` na Linuksie
+oraz Windows. macOS nie został zweryfikowany; wspólny skrypt nie potwierdza
+zgodności z toolchainem tego systemu.
 
 ## Wymagania
 
 - CMake 3.22 lub nowszy na `PATH`; ustawienie `jhbase.cmake`
   w `.vscode/settings.json` wskazuje w razie potrzeby inny plik wykonywalny.
 - Ninja albo na Windows Developer PowerShell z NMake i `cl.exe`. Generator
-  Visual Studio nie zapisuje bazy kompilacji, dlatego sterownik woli Ninja,
-  a w drugiej kolejności NMake Makefiles.
+  Visual Studio nie zapisuje bazy kompilacji, dlatego skrypt wybiera Ninja,
+  a gdy jej brakuje, NMake Makefiles.
 - Przypięte źródła Unity: `./scripts/ensure_tools.sh unity` na Linuksie albo
   `JHBASE_TOOLS_ROOT` wskazujący zainstalowany katalog narzędzi.
 - Fixture liczb HAL do testów w `../JaszczurHAL` albo `JHBASE_HAL_ROOT`.
@@ -37,8 +38,10 @@ tak samo na Linuksie, macOS i Windows: `scripts/vscode_workspace.cmake`.
 
 Skróty pochodzą z pliku skrótów użytkownika VS Code;
 `.vscode/keybindings.reference.json` wymienia wpisy, tak jak w JaszczurHAL.
-Zadań wgrywania, monitora szeregowego i sondy debugowania tu nie ma: jhbase
-jest biblioteką hostową.
+Te profile workspace budują i testują jhbase na hoście. Wgrywanie na płytkę,
+monitorowanie portu szeregowego i obsługa sond należą do osobnego
+[przebiegu pomiarów na urządzeniach](testing.md#pomiary-na-urządzeniach).
+Przenośną bibliotekę można linkować z firmware.
 
 Zadanie `Project: Install library` buduje aktywny profil i instaluje bibliotekę
 w `.build/install/<profile>/<config>`. Wywołane z terminala przez
@@ -86,5 +89,5 @@ cmake -DJB_ACTION=config-dump -P scripts/vscode_workspace.cmake
 Zestaw CTest `vscode_workspace` (etykieta `tooling`; część etapów host i clean
 oraz runnera MSVC) sprawdza dokumenty zadań względem sterownika i wykonuje na
 tymczasowej kopii drzewa każdą akcję, której używają zadania: select, build,
-test, refresh-intellisense, config-dump, clean i install-hooks.
+test, install, refresh-intellisense, config-dump, clean i install-hooks.
 `-DJHBASE_VSCODE_CHECK=OFF` pomija go w buildzie.

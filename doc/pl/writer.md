@@ -1,9 +1,8 @@
 # Sekwencyjny zapis JSON
 
-Dołącz [json_writer.h](../../include/jb/json_writer.h). Writer zapisuje jedną
-wartość JSON w formacie compact przez synchroniczny callback. Stan, stos
-kontenerów i skopiowane klucze
-znajdują się w pamięci wywołującego. Heap ani mutowalny DOM nie są potrzebne.
+Writer zapisuje jedną wartość JSON bez zbędnych białych znaków przez
+synchroniczny callback. Dołącz [json_writer.h](../../include/jb/json_writer.h).
+Stan, stos kontenerów i skopiowane klucze znajdują się w pamięci wywołującego. Heap ani mutowalny DOM nie są potrzebne.
 Kompletny [przykład writera](../../examples/json_writer.c) jest budowany
 i uruchamiany jako C11 oraz C++17.
 
@@ -16,7 +15,7 @@ niewyrównaną pamięcią bajtową.
 
 `jb_json_writer_init(writer, limits, work, sink, user)` rozpoczyna nowy dokument.
 Wskaźniki writer, limits i sink są wymagane; user trafia do sinka bez zmian.
-Błędne argumenty dają `HAL_EINVAL`, za mały scratch — `HAL_EOVERFLOW`.
+Błędne argumenty dają `HAL_EINVAL`, a za mały scratch daje `HAL_EOVERFLOW`.
 Nieudany init zostawia nieaktywny uchwyt z zapamiętanym błędem. Ponowny init
 pozwala też zacząć od nowa po błędzie.
 
@@ -67,8 +66,8 @@ finish zwraca ten sam wynik bez wywołania sinka. Zapis po finish daje
 | `jb_json_writer_string(writer, value)` | Zapisuje bajty UTF-8 z escape'ami dla znaków sterujących, cudzysłowów i backslashy. |
 | `jb_json_writer_bool(writer, value)` | Zapisuje `true` albo `false`. |
 | `jb_json_writer_null(writer)` | Zapisuje `null`. |
-| `jb_json_writer_u64(writer, value)` | Zapisuje dokładny integer unsigned. |
-| `jb_json_writer_i64(writer, value)` | Zapisuje dokładny integer signed, także `INT64_MIN`. |
+| `jb_json_writer_u64(writer, value)` | Zapisuje dokładną liczbę całkowitą bez znaku. |
+| `jb_json_writer_i64(writer, value)` | Zapisuje dokładną liczbę całkowitą ze znakiem, także `INT64_MIN`. |
 | `jb_json_writer_number(writer, token)` | Sprawdza kompletny token liczby JSON i zachowuje jego bajty. |
 | `jb_json_writer_f32(writer, value)` | Zapisuje skończone natywne binary32 najkrótszą postacią dziesiętną odtwarzającą tę samą wartość. |
 | `jb_json_writer_f64(writer, value)` | Zapisuje skończone natywne binary64 według tej samej zasady. |
@@ -76,7 +75,7 @@ finish zwraca ten sam wynik bez wywołania sinka. Zapis po finish daje
 
 Miejsce wartości to korzeń, element tablicy albo wartość po kluczu obiektu.
 Writer sam dodaje przecinki i dwukropki. Drugi korzeń, wartość lub klucz
-w niewłaściwym miejscu oraz niedopasowane end dają `HAL_ESTATE`.
+w niewłaściwym miejscu oraz zamknięcie kontenera niewłaściwego typu dają `HAL_ESTATE`.
 Wyczerpanie limitu daje `HAL_EOVERFLOW`.
 
 Klucze i stringi korzystają ze spanów, bez terminatora. `(NULL, 0)` oznacza
@@ -97,7 +96,7 @@ status = jb_json_writer_finish(&writer, &length);
 ```
 
 Wynikiem jest `{"message":"a\u0000b"}`. Udany finish jest obowiązkowy także po
-udanym ostatnim end. Można sprawdzać sam finish, ponieważ każda operacja
+poprawnym zamknięciu ostatniego kontenera. Można sprawdzać sam finish, ponieważ każda operacja
 zapamiętuje pierwszy błąd. Można też sprawdzać wynik każdej operacji.
 
 Token liczby nie zawiera otaczających białych znaków ani wewnętrznego NUL.
@@ -120,8 +119,8 @@ muszą pozostać dostępne i niezmienione przez całe wywołanie.
 ## Sinki i błędy
 
 `jb_json_sink_fn(user, data, length)` musi synchronicznie przyjąć cały fragment
-albo zwrócić zdefiniowany ujemny status HAL. Nie może zachować data, ponownie
-wejść do tego samego writera ani modyfikować jego scratch. `HAL_NONE` i nieznane
+albo zwrócić zdefiniowany ujemny status HAL. Nie może zachować wskaźnika `data`, ponownie
+wywołać tego samego writera ani modyfikować jego scratch. `HAL_NONE` i nieznane
 kody zmieniają się w `HAL_EINTERNAL`. Zdefiniowany błąd, także `HAL_EAGAIN`,
 jest przekazywany bez zmian.
 
@@ -131,7 +130,7 @@ jest przekazywany bez zmian.
 | `jb_json_count_sink` | Przyjmuje `size_t *` jako user. Liczy bajty z kontrolą przepełnienia, bez zapisywania wyniku. |
 
 Pierwszy błąd zostaje zapamiętany: późniejsze operacje zwracają go bez wywołania
-sinka. Wyjście może już zawierać prefix z wcześniejszych przyjętych fragmentów.
+sinka. Wyjście może już zawierać początek dokumentu z wcześniejszych przyjętych fragmentów.
 Nie ma ponawiania zapisu ani cofania transmisji. Jeśli aplikacja wymaga
 sprawdzenia JSON przed wysłaniem, najpierw zbuduj wynik w buforze i sprawdź finish.
 

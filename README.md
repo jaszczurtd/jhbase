@@ -6,14 +6,8 @@ jhbase provides a portable C11 UTF-8 decoder/encoder and an immutable JSON
 parser, exact numeric reads, C literals and a sequential JSON writer. Callers
 supply token storage and scratch; the parser preserves original number tokens.
 
-jhbase owns the status codes (`jb/status.h`) and `COUNTOF` (`jb/array.h`) that
-JaszczurHAL uses through its own headers; it does not configure or link HAL.
-Test and gate tools
-(Unity, cppcheck, PMD, the RISC-V and Xtensa toolchains, the oldest supported
-CMake) have their own pins in
-`third_party/*_version.conf`; `./scripts/ensure_tools.sh` installs them below
-`.build/tools`. Buffered float output uses the pinned Ryu subset; see
-[dependencies and licenses](doc/en/dependencies.md).
+jhbase defines the status codes (`jb/status.h`) and `COUNTOF` (`jb/array.h`)
+used by JaszczurHAL. The library does not configure or link HAL.
 
 Build with CMake 3.22 or later and a C11/C++17 compiler, after
 `./scripts/ensure_tools.sh unity`:
@@ -35,24 +29,19 @@ On Linux, run `./scripts/ensure_tools.sh` and `./scripts/prepare_comparison.sh`
 once, then the complete local suite with `./runalltests.sh`.
 Use `--list-stages` or `--stage host` to select a stage. The
 [test guide](doc/en/testing.md) lists tools and platform limits.
-To work in VS Code, open the repository root: [the VS Code guide](doc/en/vscode.md)
-lists the tasks, build profiles and IntelliSense refresh, driven by one CMake
-script on every host.
-
-Commits follow the JaszczurHAL rules: `./scripts/ensure_tools.sh` sets
-`core.hooksPath` to the tracked `.githooks` (or run
-`git config core.hooksPath .githooks` once). `commit-msg` requires a
-Conventional Commits subject (`type(scope): subject`, at most 100 characters);
-`pre-commit` normalizes staged text, runs clang-format on C/C++ and checks the
-staged tree (owned-source whitespace, the Ryu manifest, shell syntax).
+It also describes [commit checks](doc/en/testing.md#commit-checks).
+To work in VS Code, open the repository root and follow
+[the VS Code guide](doc/en/vscode.md).
 
 See [the API guide](doc/en/api.md) for memory, limits and error handling.
-Optional NFC and character properties use `JHBASE_UNICODE=ON` and
-`jb::unicode`; see [Unicode](doc/en/api.md#unicode).
-Prepare its pinned source checkout with `cmake -P scripts/ensure_utf8proc.cmake`.
-JSON Pointer reads and writes paths through [json_pointer.h](include/jb/json_pointer.h).
+Optional Unicode normalization and character properties use
+`JHBASE_UNICODE=ON` and `jb::unicode`; see [Unicode](doc/en/api.md#unicode).
+JSON Pointer locates values and writes node paths through
+[json_pointer.h](include/jb/json_pointer.h).
 Host file operations use `JHBASE_HOST=ON` and `jb::host`; see [host files](doc/en/host.md).
 JSON Schema remains outside this prototype.
-Its public ABI may change before the first integration pin.
+The public ABI may still change; integrations should use a reviewed commit pin.
+The [dependencies guide](doc/en/dependencies.md) covers preparation, tool pins,
+Ryu, utf8proc and their licenses.
 
 License: [JaszczurHAL Attribution License (MIT-based)](LICENSE).

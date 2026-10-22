@@ -1,6 +1,6 @@
 # Pliki hosta
 
-API `jb/file.h` odczytuje pliki, rozwiązuje ścieżki UTF-8 i zapisuje całe pliki
+API `jb/file.h` odczytuje pliki, wyznacza ścieżki UTF-8 i zapisuje całe pliki
 wynikowe na Linuksie oraz Windows. Włącz `JHBASE_HOST=ON` i linkuj `jb::host`.
 Implementacja wymaga kompilatora i runtime C++17; funkcje publiczne można
 wywoływać z C11. Alokacje hosta i nagłówki systemowe pozostają poza `jb::base`.
@@ -13,7 +13,7 @@ ctest --test-dir .build/host --output-on-failure
 ```
 
 Instalację wykonuje `cmake --install`. Pakiet eksportuje `jb::host`, gdy był
-budowany z tą opcją. Konsument w C potrzebuje także linkera i runtime C++.
+budowany z tą opcją. Aplikacja w C potrzebuje także linkera i runtime C++.
 Pakiet zawierający wyłącznie statusy nie dołącza kodu hosta.
 
 ## Odczyt i ścieżki
@@ -26,18 +26,19 @@ oraz podczas odczytu, również gdy plik rośnie. Odczyt podąża za istniejący
 linkami; plik innego rodzaju daje `HAL_ETYPE`. Można wywołać `jb_file_release(NULL)`.
 
 `jb_path_resolve(base, path, buffer, capacity, required)` wymaga jawnej,
-absolutnej ścieżki bazowej. Łączy i porządkuje składniki ścieżki bez odczytu
-linków i zmiany cwd. Ścieżki podlegają regułom systemu hosta i używają UTF-8;
-Windows otrzymuje je w postaci wide. Ścieżki względne wobec dysku Windows
-są odrzucane. `(NULL,0)` mierzy wynik WRAZ z terminatorem NUL. Za mały bufor
-daje `HAL_EOVERFLOW`, pełny wymagany rozmiar i zachowuje wszystkie bajty bufora.
+bezwzględnej ścieżki bazowej. Łączy i porządkuje składniki ścieżki bez odczytu
+linków i zmiany katalogu roboczego procesu. Ścieżki podlegają regułom systemu
+hosta i używają UTF-8; na Windows są zamieniane na UTF-16 dla API systemowego.
+Ścieżki względne wobec dysku Windows są odrzucane. `(NULL,0)` mierzy wynik
+wraz z terminatorem NUL. Za mały bufor daje `HAL_EOVERFLOW`; funkcja podaje
+pełny wymagany rozmiar i zachowuje wszystkie bajty bufora.
 
 ## Porównanie i zapis
 
 `jb_file_write_atomic(path, data, length, check_only, changed)` najpierw
-porównuje całe bajty. Identyczny plik zachowuje mtime. Tryb sprawdzania ustawia
+porównuje całą zawartość bajt po bajcie. Identyczny plik zachowuje mtime. Tryb sprawdzania ustawia
 `changed`, gdy wyniku brakuje lub ma inną treść; nie tworzy katalogów ani
-plików tymczasowych. Wywołujący decyduje, czy różnica oznacza nieudany check.
+plików tymczasowych. Wywołujący decyduje, czy różnica oznacza błąd kontroli.
 
 Zapis tworzy brakujące katalogi nadrzędne i osobny plik tymczasowy obok celu.
 Przed podmianą zapisuje wszystkie bajty, wykonuje flush i zamyka plik.
@@ -55,7 +56,8 @@ bajty są widoczne, lecz nie potwierdzono trwałości zapisu. Błąd nie usuwa n
 utworzonych katalogów nadrzędnych. Nadal obowiązują ograniczenia systemu plików
 i współdzielenia plików.
 
-Funkcje zwracają wspólny `hal_status_t`. Błędny UTF-8 daje `HAL_EPROTO`, brak
+Funkcje, które mogą zakończyć się błędem, zwracają wspólny `hal_status_t`.
+Błędny UTF-8 daje `HAL_EPROTO`, brak
 pamięci `HAL_ENOMEM`, przekroczony limit `HAL_EOVERFLOW`, brak wejścia
 `HAL_ENOENT`, a odmowa dostępu `HAL_EPERM`. Pozostałe błędy I/O dają `HAL_EIO`
 lub `HAL_EBUSY`. Zajęty cel podmiany na Windows może też dać `HAL_EPERM`,

@@ -27,8 +27,8 @@ typedef struct {
  * @param max_bytes Maximum accepted size, also enforced if the file grows.
  * @param out Required empty owner, assigned only on success.
  * @return HAL_OK, HAL_EINVAL (arguments), HAL_EPROTO (invalid UTF-8 path),
- * HAL_ENOENT, HAL_EPERM, HAL_ETYPE (nonregular file), HAL_EOVERFLOW (limit),
- * HAL_ENOMEM or HAL_EIO. No exception crosses the C API.
+ * HAL_ESTATE (nonempty out), HAL_ENOENT, HAL_EPERM, HAL_ETYPE (nonregular file),
+ * HAL_EOVERFLOW (limit), HAL_ENOMEM or HAL_EIO. No exception crosses the C API.
  */
 hal_status_t jb_file_read(const char *path, size_t max_bytes, jb_file_data_t *out);
 

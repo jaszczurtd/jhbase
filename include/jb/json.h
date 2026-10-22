@@ -156,14 +156,14 @@ hal_status_t jb_json_number_token(jb_json_node_t node, jb_json_span_t *out);
 /** Read boolean without coercion. Required out; wrong kind HAL_ETYPE. */
 hal_status_t jb_json_get_bool(jb_json_node_t node, bool *out);
 
-/** Decode string bytes without a terminator. Required required.
+/** Decode string bytes without a terminator. The required pointer must not be NULL.
  * (NULL,0) measures. On HAL_EOVERFLOW, reports full required bytes and leaves
  * buffer untouched. Wrong kind gives HAL_ETYPE, bad pointers HAL_EINVAL.
  */
 hal_status_t jb_json_string_copy(jb_json_node_t node, char *buffer, size_t capacity,
                                  size_t *required);
 /** Decode a member name with the same buffer rules as string_copy.
- * A node without a key gives HAL_EINVAL. Required required.
+ * A node without a key gives HAL_EINVAL. The required pointer must not be NULL.
  */
 hal_status_t jb_json_key_copy(jb_json_node_t member, char *buffer, size_t capacity,
                               size_t *required);

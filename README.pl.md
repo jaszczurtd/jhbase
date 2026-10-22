@@ -2,18 +2,13 @@
 
 *Dostępna jest także [wersja angielska](README.md).*
 
-jhbase udostępnia przenośny dekoder/enkoder UTF-8, parser JSON, dokładny odczyt
-liczb, literały C i sekwencyjny writer JSON w C11. Wywołujący dostarcza pamięć
-na tokeny i scratch. Parser zachowuje oryginalny zapis liczb.
+jhbase udostępnia w C11 przenośny dekoder i enkoder UTF-8, parser JSON,
+dokładny odczyt liczb, literały C i sekwencyjny writer JSON. Parser nie zmienia
+wejścia i zachowuje oryginalny zapis liczb. Wywołujący przekazuje pamięć
+na tokeny i scratch.
 
 jhbase definiuje kody statusów (`jb/status.h`) i `COUNTOF` (`jb/array.h`),
-z których JaszczurHAL korzysta przez własne nagłówki. Biblioteka nie
-konfiguruje ani nie linkuje HAL. Narzędzia testów
-i bramki (Unity, cppcheck, PMD, toolchainy RISC-V i Xtensa, najstarszy
-obsługiwany CMake) mają własne piny
-w `third_party/*_version.conf`; `./scripts/ensure_tools.sh` instaluje je
-w `.build/tools`. Buforowy zapis float korzysta z przypiętego podzbioru Ryu;
-zobacz [zależności i licencje](doc/pl/dependencies.md).
+z których korzysta JaszczurHAL. Biblioteka nie konfiguruje ani nie linkuje HAL.
 
 Do kompilacji potrzebne są CMake co najmniej 3.22 i kompilator C11/C++17,
 po wcześniejszym `./scripts/ensure_tools.sh unity`:
@@ -35,25 +30,20 @@ Na Linuksie uruchom raz `./scripts/ensure_tools.sh` i `./scripts/prepare_compari
 a następnie pełny lokalny zestaw kontroli przez `./runalltests.sh`.
 `--list-stages` pokazuje etapy, a `--stage host` wybiera jeden z nich.
 [Opis testów](doc/pl/testing.md) wymienia narzędzia i ograniczenia platform.
-Do pracy w VS Code otwórz katalog główny repozytorium: [opis VS Code](doc/pl/vscode.md)
-wymienia zadania, profile budowania i odświeżanie IntelliSense, sterowane
-jednym skryptem CMake na każdym hoście.
-
-Commity podlegają regułom JaszczurHAL: `./scripts/ensure_tools.sh` ustawia
-`core.hooksPath` na śledzony katalog `.githooks` (albo wykonaj raz
-`git config core.hooksPath .githooks`). `commit-msg` wymaga tematu w formacie
-Conventional Commits (`type(scope): subject`, najwyżej 100 znaków);
-`pre-commit` normalizuje stagowany tekst, formatuje C/C++ przez clang-format
-i sprawdza drzewo stagowane (whitespace własnych źródeł, manifest Ryu,
-składnia skryptów).
+Opisuje też [kontrole commitów](doc/pl/testing.md#kontrole-commitów).
+Do pracy w VS Code otwórz katalog główny repozytorium i skorzystaj
+z [instrukcji VS Code](doc/pl/vscode.md).
 
 [Opis API](doc/pl/api.md) wyjaśnia obsługę pamięci, limitów i błędów.
-Opcjonalne NFC i właściwości znaków włącza `JHBASE_UNICODE=ON` i target
+Opcjonalną normalizację Unicode i właściwości znaków włącza `JHBASE_UNICODE=ON` i target
 `jb::unicode`; opisuje je [sekcja Unicode](doc/pl/api.md#unicode).
-Przypięty checkout przygotowuje `cmake -P scripts/ensure_utf8proc.cmake`.
-JSON Pointer odczytuje i zapisuje ścieżki przez [json_pointer.h](include/jb/json_pointer.h).
+JSON Pointer wyszukuje wartości i zapisuje ścieżki węzłów przez
+[json_pointer.h](include/jb/json_pointer.h).
 Operacje plikowe hosta włącza `JHBASE_HOST=ON` i target `jb::host`; zobacz [pliki hosta](doc/pl/host.md).
 JSON Schema pozostaje poza obecnym zakresem.
-Publiczne ABI prototypu może zmienić się przed pierwszą integracją.
+Publiczne ABI nadal może się zmieniać; integracje powinny używać
+pinu sprawdzonego commita.
+[Opis zależności](doc/pl/dependencies.md) wyjaśnia ich przygotowanie, piny narzędzi
+oraz wykorzystanie Ryu, utf8proc i ich licencje.
 
 Licencja: [JaszczurHAL Attribution License (MIT-based)](LICENSE).

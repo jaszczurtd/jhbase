@@ -59,7 +59,8 @@ and treats `1`, `1.0` and `1e0` as equal. Huge exponents are compared without
 expanding their values into enormous buffers. Unaligned byte scratch is valid.
 The workspace and output must be disjoint from each other and from both documents.
 Insufficient scratch or exhausted work gives `HAL_EOVERFLOW`; zero permits no
-work. Every digit/limb step is charged. `out_order` changes only on success.
+work. Each digit step or operation on a limb (a fixed-size part of a large
+integer) counts against the budget. `out_order` changes only on success.
 
 ## IEEE conversion
 
