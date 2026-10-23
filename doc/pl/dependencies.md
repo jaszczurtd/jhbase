@@ -127,3 +127,10 @@ instalacji wybiera każdy projekt osobno. Toolchain Xtensa służy profilowi
 ESP32-S3. JaszczurHAL dostaje swój kompilator Xtensa razem z ESP-IDF
 i sprawdza, czy ten pin zgadza się z manifestem narzędzi ESP-IDF, bo archiwum
 z pomiarów na urządzeniu linkuje się z firmware ESP-IDF.
+
+[Pin ccache](../../third_party/ccache_version.conf) dostarcza cache kompilatora
+dla macierzy buildów projektów korzystających z jhbase. Zapisuje oficjalne
+archiwa statyczne dla Linuksa x86_64 i ARM64 oraz archiwum Windows x64,
+wraz z sumami SHA-256. Projekty pobierają je i sprawdzają we własnych katalogach
+narzędzi. Bramka jhbase nie wymaga ccache. Upstream tego wydania nie dostarcza
+binarki dla Linuksa ARM32.

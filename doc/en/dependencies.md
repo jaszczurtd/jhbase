@@ -123,3 +123,9 @@ revisions and digests only; each project chooses its own install directories.
 The Xtensa toolchain serves the ESP32-S3 profile. JaszczurHAL gets its Xtensa
 compiler through ESP-IDF and checks that this pin matches the ESP-IDF tools
 manifest, because the device archive links into ESP-IDF firmware.
+
+The [ccache pin](../../third_party/ccache_version.conf) supplies the compiler
+cache for consumer build matrices. It records official static Linux x86_64
+and ARM64 archives and a Windows x64 archive, with SHA-256 sums. Consumers
+download and verify them in their own tool directories. jhbase's gate does
+not require ccache. This release has no upstream Linux ARM32 binary.
