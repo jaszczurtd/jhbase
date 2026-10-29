@@ -112,6 +112,14 @@ plikowe bez wymuszania błędów alokacji, ponieważ podmienia globalny
 Kontrole instalacji kompilują i linkują przykładowe aplikacje korzystające
 z `jb::host` w C oraz C++. Profile freestanding nadal kompilują wyłącznie źródła przenośne.
 
+Ten sam program testuje cytowanie argumentów procesów, puste argumenty,
+środowisko UTF-8 i cwd, jednoczesny binarny stdout/stderr, równoległe wywołania,
+błędy uruchomienia, anulowanie, timeout i błędy callbacka wyjścia. Potomek
+utrzymuje otwarte potoki i próbuje opóźnionego zapisu: zakończenie musi
+uniemożliwić zapis, także po normalnym wyjściu procesu głównego. Linux sprawdza
+też zakończenie sygnałem i uruchamianie z zamkniętymi standardowymi deskryptorami.
+Scenariusze należą do istniejących konfiguracji hosta, sanitizerów, memcheck i Windows.
+
 ## Kontrole commitów
 
 `./scripts/ensure_tools.sh` ustawia `core.hooksPath` na katalog `.githooks`
@@ -194,3 +202,22 @@ z parse, walidację UTF-8 oraz odczyt zapisanych liczb do tych samych bitów.
 `result=PASS` wymaga wszystkich. Dioda miga podczas pomiaru, a potem raz na
 sekundę przy PASS albo pięć razy na sekundę przy FAIL; dioda adresowalna
 świeci na niebiesko, a potem na zielono albo czerwono.
+
+## Pliki strumieniowe, blokady i katalogi tymczasowe
+
+Istniejący test hosta obejmuje publikację porcjami, zachowanie mtime, porzucenie,
+limity oraz odmowę publikacji po błędzie dopisania. Potomek Linuksa stosuje
+rzeczywisty limit rozmiaru pliku, wymusza częściowy zapis i sprawdza odmowę publikacji.
+Blokady są sprawdzane przez niezależne uchwyty i procesy, timeout/anulowanie,
+zwolnienie podczas oczekiwania i sprzątanie OS po zakończeniu właściciela.
+Testy katalogów obejmują prywatne uprawnienia/DACL, unikalność, ścieżki Unicode
+oraz dowiązania dzieci poza własne drzewo. Próby błędów alokacji wymagają braku
+pozostawionych plików i katalogów tymczasowych.
+
+Regresja zakończenia procesu czeka na potwierdzone wyjście OS w callbacku danych,
+a następnie wraca po deadline; bajty kolejki i normalny kod zakończenia muszą
+zostać zachowane. Linux sprawdza też śmierć rodzica w izolowanym helperze
+subreaper, błędy exec i wyczerpania deskryptorów oraz dziedziczoną maskę sygnałów.
+Sprzątanie potomka używa bramki zwolnienia i obserwacji zakończenia OS zamiast
+opóźnionego zapisu sprawdzanego po stałym sleep. Windows jawnie raportuje brak
+uprawnienia do dowiązań jako niedostępny podprzypadek i kontynuuje testy ACL/katalogu.

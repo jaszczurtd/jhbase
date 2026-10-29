@@ -183,8 +183,11 @@ function(consumer name prefix library)
       string(APPEND code "#include <jb/unicode.h>\n")
     endif()
     if(JB_HOST)
-      string(APPEND code "#include <jb/file.h>\n")
+      string(APPEND code "#include <jb/file.h>\n#include <jb/process.h>\n")
     endif()
+  endif()
+  if(library AND JB_HOST)
+    string(APPEND code "static bool canceled(void *context) { return context == 0; }\n")
   endif()
   string(APPEND code "int main(void) {\n  static const char text[] = \"ok\";\n"
     "  hal_status_t status = (COUNTOF(text) == 3u) ? HAL_OK : HAL_EINVAL;\n")
@@ -192,7 +195,14 @@ function(consumer name prefix library)
     if(JB_HOST)
       string(APPEND code "  jb_file_data_t file = {0, 0};\n"
         "  if (jb_file_read(\"\", 0u, &file) != HAL_EINVAL) return 4;\n"
-        "  jb_file_release(&file);\n")
+        "  jb_file_release(&file);\n"
+        "  jb_file_writer_t *writer = 0;\n  jb_file_lock_t *lock = 0;\n  jb_temp_dir_t *directory = 0;\n"
+        "  if (jb_file_writer_abort(&writer) != HAL_OK || jb_file_lock_release(&lock) != HAL_OK || jb_temp_dir_remove(&directory) != HAL_OK) return 6;\n"
+        "  jb_cancel_fn cancel = canceled;\n"
+        "#ifdef _WIN32\n  const char *lock_path = \"C:/jb-cancel-probe\";\n#else\n  const char *lock_path = \"/jb-cancel-probe\";\n#endif\n"
+        "  if (jb_file_lock_acquire(lock_path, 0, cancel, 0, &lock) != HAL_ECANCELED) return 7;\n"
+        "  jb_process_result_t process;\n"
+        "  if (jb_process_run(0, &process) != HAL_EINVAL || process.started) return 5;\n")
     endif()
     string(APPEND code "  size_t bad = 0;\n"
       "  if (status == HAL_OK) status = jb_utf8_validate(text, 2u, &bad);\n")

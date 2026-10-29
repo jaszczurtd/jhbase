@@ -39,7 +39,7 @@ Opcjonalną normalizację Unicode i właściwości znaków włącza `JHBASE_UNIC
 `jb::unicode`; opisuje je [sekcja Unicode](doc/pl/api.md#unicode).
 JSON Pointer wyszukuje wartości i zapisuje ścieżki węzłów przez
 [json_pointer.h](include/jb/json_pointer.h).
-Operacje plikowe hosta włącza `JHBASE_HOST=ON` i target `jb::host`; zobacz [pliki hosta](doc/pl/host.md).
+Operacje plików i procesów hosta włącza `JHBASE_HOST=ON` i target `jb::host`; zobacz [pliki i procesy hosta](doc/pl/host.md).
 JSON Schema pozostaje poza obecnym zakresem.
 Publiczne ABI nadal może się zmieniać; integracje powinny używać
 pinu sprawdzonego commita.

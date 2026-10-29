@@ -1,4 +1,4 @@
-# Pliki hosta
+# Pliki i procesy hosta
 
 API `jb/file.h` odczytuje pliki, wyznacza ścieżki UTF-8 i zapisuje całe pliki
 wynikowe na Linuksie oraz Windows. Włącz `JHBASE_HOST=ON` i linkuj `jb::host`.
@@ -62,3 +62,160 @@ pamięci `HAL_ENOMEM`, przekroczony limit `HAL_EOVERFLOW`, brak wejścia
 `HAL_ENOENT`, a odmowa dostępu `HAL_EPERM`. Pozostałe błędy I/O dają `HAL_EIO`
 lub `HAL_EBUSY`. Zajęty cel podmiany na Windows może też dać `HAL_EPERM`,
 gdy system zgłasza odmowę dostępu. Każda granica API C przechwytuje wyjątki C++.
+
+## Procesy potomne
+
+`jb/process.h` udostępnia synchroniczne `jb_process_run(options, result)` przez
+`jb::host`. Podaj bezwzględną ścieżkę programu i katalogu roboczego. Argumenty
+to lista zakończona NULL, bez `argv[0]`; NULL oznacza brak argumentów.
+API nie uruchamia powłoki ani nie szuka w PATH. Windows konwertuje UTF-8 na
+UTF-16 i cytuje argumenty według reguł runtime Microsoft C. Program z własnym
+parserem linii poleceń może interpretować je inaczej.
+
+Wskaźnik środowiska równy NULL dziedziczy środowisko rodzica. Lista inna niż
+NULL zastępuje je w całości; `{NULL}` daje puste środowisko. Wpisy mają postać
+`NAME=VALUE`, a nazwy muszą być unikalne, bez rozróżniania wielkości liter na
+Windows. Wywołanie nie zmienia cwd ani środowiska rodzica. Nie zmieniaj środowiska
+rodzica równolegle z uruchamianiem procesu. Stdin potomka odczytuje EOF.
+
+Oba potoki wyjściowe są opróżniane naprzemiennie z ograniczonymi buforami.
+Opcjonalny callback otrzymuje porcje binarnych danych i identyfikator strumienia
+w wątku wywołującym. Bajty zachowują kolejność w obrębie strumienia; API nie
+ustala kolejności między stdout i stderr. NULL odrzuca dane, nadal opróżniając
+potoki. Status inny niż `HAL_OK` kończy wywołanie z tym statusem. Callback
+korzysta z pożyczonego bufora, musi szybko wracać i nie może rzucać wyjątków.
+
+`timeout_ms` mierzy czas monotoniczny od chwili przed uruchomieniem; zero oznacza
+oczekiwanie bez limitu. Opcjonalny callback anulowania jest sprawdzany przed
+uruchomieniem i podczas oczekiwania. True daje `HAL_ECANCELED`. Inny wątek może
+żądać anulowania przez atomowy stan należący do wywołującego. Uruchamianie,
+sprzątanie systemowe i wykonanie callbacków nie mają gwarancji hard real-time.
+Niezależne wywołania mogą działać równolegle; konteksty i synchronizacja
+callbacków należą do wywołującego.
+
+Wynik jest inicjalizowany także przy błędzie. `HAL_OK` oznacza zebranie procesu
+i opróżnienie wyjścia, niezależnie od kodu zakończenia. Sprawdź `exit_code`
+oraz `term_signal` na Linuksie. Windows zapisuje w `exit_code` także wymuszone
+zakończenie przez OS; przy zatrzymanym wywołaniu nie jest to wynik aplikacji. `started` może być true przy błędzie exec na
+Linuksie; pozostaje on błędem API z `native_error`, zamiast sukcesem z kodem
+127. Niepoprawne wejście i błędy callbacków nie mają kodu błędu systemowego.
+Timeout lub anulowanie rozpoznane przed zaobserwowaniem wyjścia pozostaje
+statusem API, nawet gdy dziecko zakończy się naturalnie podczas sprzątania.
+`HAL_ETIMEOUT` z `exited=true` i linuksowym `term_signal=0` jest więc poprawnym
+wynikiem: pola zakończenia opisują zebrane dziecko, a nie dotrzymanie budżetu.
+Błąd sprzątania grupy również zachowuje wynik zebranego procesu głównego.
+
+Każdy potomek ma własną grupę procesów na Linuksie lub Windows Job Object.
+Timeout, anulowanie, błąd callbacka lub I/O wymuszają zakończenie i zebranie
+procesu głównego. Pozostali potomkowie są kończeni również po normalnym wyjściu
+procesu głównego, więc odziedziczone potoki nie blokują końca wywołania.
+Po zaobserwowaniu zakończenia API utrwala liczbę bajtów w kolejce i opróżnia
+ją przed oceną timeoutu lub anulowania. Późniejsze zapisy innych procesów są
+pomijane. Drenowanie może skończyć się po deadline; błąd callbacka wyjścia nadal
+zatrzymuje wywołanie natychmiast. Dane pozostałe po zatrzymaniu mogą zostać odrzucone. API nie służy zatem do
+uruchamiania trwałych usług w tle.
+
+Potomek Linuksa, który celowo zmienia grupę lub sesję, opuszcza nadzór; API
+nie zapewnia sandboxingu. Windows przypisuje wstrzymany proces do joba przed
+rozpoczęciem wykonania i nie pozwala na breakaway. Pozostałe odziedziczone
+uchwyty i deskryptory są wykluczane. Dalszych potomków zbiera ich rodzic
+systemowy. Na Linuksie nie ignoruj SIGCHLD, nie ustawiaj `SA_NOCLDWAIT` ani
+nie zbieraj tego procesu innym mechanizmem.
+
+## Strumieniowy zapis atomowy
+
+`jb_file_writer_begin(path, max_bytes, out)` tworzy tymczasowego sąsiada pliku
+wskazanego bezwzględną ścieżką i tworzy brakujące katalogi nadrzędne. Wyzeruj
+wskaźnik właściciela. `jb_file_writer_write` dopisuje dokładne bajty przy
+ograniczonym zużyciu pamięci; limit obejmuje ich łączną liczbę, a zero pozwala
+tylko na pusty plik. Błąd dopisania blokuje późniejszą publikację niepełnego wyniku.
+
+`jb_file_writer_commit` opróżnia plik, porównuje oba pliki porcjami i zachowuje
+mtime celu przy identycznej zawartości. W przeciwnym razie korzysta z tych samych
+helperów publikacji i trwałości co `jb_file_write_atomic`, także do zachowania
+uprawnień POSIX. Bity rwx istniejącego celu są odczytywane i stosowane przy
+`begin`; późniejsza zmiana uprawnień celu nie jest kopiowana przy commit.
+`jb_file_writer_abort` zamyka i usuwa plik tymczasowy bez publikacji. Obie operacje zwalniają i zerują poprawnego właściciela także przy
+błędzie OS; niepoprawne argumenty commit pozostawiają właściciela. Błąd sprzątania
+może pozostawić plik tymczasowy na dysku. Może go pozostawić również śmierć procesu.
+
+Commit ustawia `changed` według reguł API jednorazowego, także po publikacji,
+po której zawiedzie fsync katalogu POSIX. Oba API odrzucają końcowe dowiązania,
+reparse points i cele inne niż zwykły plik, podążają za linkami rodziców oraz nie
+blokują innych piszących. Uchwyty mają jednego właściciela i wymagają serializacji
+wywołań. API nie ograniczają wrogiej aktywności w systemie plików.
+
+## Blokady plików
+
+`jb_file_lock_acquire(path, timeout_ms, canceled, context, out)` otwiera trwały
+zwykły plik bez obcinania zawartości i zakłada wyłączną blokadę OS. Ścieżka UTF-8
+musi być bezwzględna, a katalog nadrzędny musi istnieć. Końcowe dowiązania i
+reparse points są odrzucane. Wyzeruj właściciela; zajęty wynik daje `HAL_ESTATE`.
+Linux używa `flock`, Windows blokuje pierwszy bajt przez `LockFileEx`.
+Niezależne próby konkurują także wewnątrz jednego procesu. Nowy plik blokady
+POSIX żąda trybu 0600 ograniczonego przez umask; istniejący zachowuje swój tryb.
+
+Timeout zero oznacza jedną próbę i `HAL_EBUSY` przy zajęciu; `UINT32_MAX`
+czeka bez końca. Inne wartości mierzą czas monotoniczny i dają `HAL_ETIMEOUT`.
+Pierwsza próba blokady poprzedza sprawdzenie upływu czasu; anulowanie nadal
+ma pierwszeństwo przed próbą. Kolejne próby uwzględniają termin.
+Opcjonalny callback anulowania działa w wątku czekającym przed otwarciem oraz
+podczas oczekiwania; true daje `HAL_ECANCELED`. Musi szybko wracać i nie może
+rzucać wyjątków. Kontekst może być NULL; żądanie z innego wątku wymaga atomowego stanu.
+
+`jb_file_lock_release` zwalnia i zeruje właściciela także przy błędzie zamknięcia.
+NULL wskaźnika lub właściciela jest dozwolone. Zakończenie procesu również zwalnia
+blokadę OS. Uchwyty nie są dziedziczone przez exec/CreateProcess; surowy fork POSIX
+może je zachować. Nie usuwaj ani nie zastępuj pliku blokady, również po zwolnieniu:
+czekający mogą nadal korzystać z jego starej tożsamości. Blokady wymagają współpracy
+wywołujących i zachowują semantykę używanego systemu plików.
+
+## Własne katalogi tymczasowe
+
+`jb_temp_dir_create(parent, out)` tworzy unikalny katalog pod istniejącym rodzicem
+wskazanym bezwzględną ścieżką UTF-8. Wyzeruj właściciela. Tryb POSIX wynosi 0700;
+Windows używa chronionej DACL przyznającej dziedziczony pełny dostęp wyłącznie
+bieżącemu użytkownikowi. Uprzywilejowany dostęp systemowy pozostaje możliwy.
+
+`jb_temp_dir_path` pożycza bezwzględną ścieżkę UTF-8 do usunięcia; NULL daje NULL.
+Przed `jb_temp_dir_remove` zatrzymaj użytkowników katalogu. Funkcja usuwa zawartość
+i katalog rekurencyjnie, bez podążania za dowiązaniami dzieci. Sukces zwalnia i
+zeruje właściciela; błąd pozostawia go do ponownej próby i może oznaczać częściowe
+sprzątanie. NULL wskaźnika lub właściciela jest dozwolone. Nie zmieniaj nazwy ani
+nie zastępuj katalogu głównego; nie zmieniaj wpisów równolegle ze sprzątaniem.
+API nie chroni przed wrogimi zmianami systemu plików, a śmierć procesu nie usuwa katalogu.
+
+## Szczegóły platform
+
+Oba API hosta używają `jb_cancel_fn` z `jb/cancel.h`. Uruchomienie na Linuksie
+dziedziczy maskę sygnałów wątku wywołującego i ignorowane sygnały; obsługiwane
+handlery są resetowane według reguł exec. Biblioteka nie instaluje handlera SIGINT
+rodzica. CLI wymagające uporządkowanego sprzątania przy Ctrl+C musi przekazać
+żądanie anulowania i zaczekać na zakończenie run przed wyjściem.
+
+Linux ustawia `PR_SET_PDEATHSIG(SIGKILL)` przed exec i sprawdza PID rodzica
+po ustawieniu, uwzględniając śmierć procesu rodzica podczas przygotowania.
+Chronione jest tylko bezpośrednie dziecko przy śmierci wątku uruchamiającego.
+Ustawienie znika po forku dziecka, uprzywilejowanym exec lub odpowiedniej zmianie
+poświadczeń; uruchomiony program może je też zmienić. Nie daje to sprzątania
+całego joba Windows po nagłej śmierci wywołującego. Szczegóły opisują
+[reguły sygnału śmierci rodzica Linux](https://man7.org/linux/man-pages/man2/PR_SET_PDEATHSIG.2const.html).
+
+Windows na czas `CreateProcessW` wyłącza dialogi błędów loadera przez
+`SetThreadErrorMode`, po czym przywraca poprzedni tryb wątku przy sukcesie lub
+błędzie. Niepoprawne executable zwraca zatem błąd API zamiast czekać na dialog
+u wywołującego bez interakcji użytkownika.
+
+Windows konwertuje ścieżki na UTF-16, ale nie dodaje automatycznie `\\?\`.
+Obowiązują limity OS oraz manifest i polityka długich ścieżek wywołującego
+programu; obsługa UTF-8 sama nie gwarantuje długich ścieżek. Jawne ścieżki
+rozszerzone muszą spełniać reguły konkretnego API Win32. Zobacz
+[limity ścieżek Windows](https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation).
+Nazwy tymczasowych plików i katalogów Windows zawierają 128 losowych bitów
+z systemowego CNG; o własności nadal decyduje wyłączne utworzenie.
+
+Błędy OS są mapowane wspólnie: nadmierne argumenty lub środowisko dają
+`HAL_EOVERFLOW`, składnik ścieżki inny niż katalog `HAL_ENOENT`, niepoprawny format
+executable `HAL_ETYPE`, przejściowy brak zasobów `HAL_EAGAIN`, a wyczerpanie
+deskryptorów `HAL_ENOMEM`. Zajęty executable lub naruszenie współdzielenia
+na Windows daje `HAL_EBUSY`. Wynik procesu zachowuje oryginalny kod błędu OS.

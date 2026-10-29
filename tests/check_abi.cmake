@@ -1,6 +1,6 @@
 file(MAKE_DIRECTORY "${JB_WORK}")
 set(includes "#include \"jb/json.h\"\n#include \"jb/utf8.h\"\n#include \"jb/json_number.h\"\n#include \"jb/json_writer.h\"\n#include \"jb/literal.h\"\n")
-string(APPEND includes "#include \"jb/file.h\"\n")
+string(APPEND includes "#include \"jb/file.h\"\n#include \"jb/process.h\"\n")
 
 function(probe name source should_pass language)
   if(language STREQUAL "CXX")

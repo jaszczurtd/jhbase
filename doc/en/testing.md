@@ -110,6 +110,14 @@ operations without allocation fault injection because it replaces global
 The installed-package checks compile and link both C and C++ consumers of
 `jb::host`. Freestanding profiles continue to compile only portable sources.
 
+The same host test executable checks process argument quoting, empty arguments,
+UTF-8 environment/cwd, simultaneous binary stdout/stderr, parallel calls,
+startup failures, cancellation, timeout and output callback errors. A descendant
+holds the output pipes and attempts a delayed write: termination must prevent
+that write, including after normal main-process exit. Linux also checks signal
+termination and launching with closed standard descriptors. These cases run
+through the existing host, sanitizer, memcheck and Windows configurations.
+
 ## Commit checks
 
 `./scripts/ensure_tools.sh` sets `core.hooksPath` to the versioned `.githooks`
@@ -191,3 +199,21 @@ written floats reading back to the same bits. `result=PASS` requires all of
 them. The LED blinks during the measurement, then once per second for PASS or
 five times per second for FAIL; an addressable LED shows blue, then green or
 red.
+
+## Streaming files, locks and temporary directories
+
+The existing host test covers chunked publication, unchanged mtime, abort,
+size limits and rejection after a failed append. A Linux child applies a real
+file-size limit to force a partial write and verifies that it cannot be published.
+Lock checks use independent handles and processes, timeout/cancellation, release
+while waiting and OS cleanup after terminating the owner. Directory checks cover
+private permissions/DACL, unique names, Unicode paths and child symlinks pointing
+outside the owned tree. Allocation-failure sweeps require no temporary leftovers.
+
+The process completion regression waits for a known OS exit inside an output
+callback, then returns after the deadline; queued bytes and the normal exit code
+must survive. Linux also tests parent death in an isolated subreaper helper,
+exec/descriptor exhaustion errors and inherited signal masks. Descendant cleanup
+uses a release gate and observed OS termination, rather than a delayed write
+checked after a fixed sleep. Windows reports a missing symlink privilege as an
+explicit unavailable subcase while continuing other directory/ACL checks.
