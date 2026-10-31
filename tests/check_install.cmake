@@ -183,7 +183,7 @@ function(consumer name prefix library)
       string(APPEND code "#include <jb/unicode.h>\n")
     endif()
     if(JB_HOST)
-      string(APPEND code "#include <jb/file.h>\n#include <jb/process.h>\n")
+      string(APPEND code "#include <jb/file.h>\n#include <jb/process.h>\n#include <jb/json_tree.h>\n")
     endif()
   endif()
   if(library AND JB_HOST)
@@ -215,6 +215,17 @@ function(consumer name prefix library)
       "  if (status == HAL_OK) status = jb_json_pointer_get(&doc, path, &node);\n"
       "  if (status == HAL_OK) status = jb_json_pointer_copy(node, 0, 0u, &required);\n"
       "  if (status == HAL_OK && required != 0u) return 3;\n")
+    if(JB_HOST)
+      string(APPEND code "  jb_json_tree_t *tree = 0;\n"
+        "  const jb_json_tree_limits_t tree_limits = {1u, 0u, 0u, 0u};\n"
+        "  const jb_json_tree_format_t format = {4u, 0u, false, false};\n"
+        "  jb_json_tree_view_t view;\n  size_t count = 0u, written = 0u;\n"
+        "  if (status == HAL_OK) status = jb_json_tree_create(node, &tree_limits, &tree);\n"
+        "  if (status == HAL_OK) status = jb_json_tree_root(tree, &view);\n"
+        "  if (status == HAL_OK) status = jb_json_tree_format(view, &format, jb_json_count_sink, &count, &written);\n"
+        "  jb_json_tree_destroy(tree);\n"
+        "  if (status == HAL_OK && (count != 4u || written != 4u)) return 8;\n")
+    endif()
     if(JB_UNICODE)
       string(APPEND code "  int32_t work[4];\n  const char *normalized = 0;\n  size_t length = 0;\n"
         "  if (status == HAL_OK) status = jb_unicode_nfc(\"abc\", 3u, work, 4u, 100u, &normalized, &length);\n"

@@ -1,4 +1,4 @@
-# Pliki i procesy hosta
+# Pliki, procesy i konfiguracja JSON na hoście
 
 API `jb/file.h` odczytuje pliki, wyznacza ścieżki UTF-8 i zapisuje całe pliki
 wynikowe na Linuksie oraz Windows. Włącz `JHBASE_HOST=ON` i linkuj `jb::host`.
@@ -98,7 +98,9 @@ i opróżnienie wyjścia, niezależnie od kodu zakończenia. Sprawdź `exit_code
 oraz `term_signal` na Linuksie. Windows zapisuje w `exit_code` także wymuszone
 zakończenie przez OS; przy zatrzymanym wywołaniu nie jest to wynik aplikacji. `started` może być true przy błędzie exec na
 Linuksie; pozostaje on błędem API z `native_error`, zamiast sukcesem z kodem
-127. Niepoprawne wejście i błędy callbacków nie mają kodu błędu systemowego.
+127. Reporter po stronie forka kończy się kodem 127 przed sygnałami cleanup,
+zachowując błąd systemowy i zebrane pola zakończenia. Niepoprawne wejście
+i błędy callbacków nie mają kodu błędu systemowego.
 Timeout lub anulowanie rozpoznane przed zaobserwowaniem wyjścia pozostaje
 statusem API, nawet gdy dziecko zakończy się naturalnie podczas sprzątania.
 `HAL_ETIMEOUT` z `exited=true` i linuksowym `term_signal=0` jest więc poprawnym
@@ -184,6 +186,64 @@ zeruje właściciela; błąd pozostawia go do ponownej próby i może oznaczać 
 sprzątanie. NULL wskaźnika lub właściciela jest dozwolone. Nie zmieniaj nazwy ani
 nie zastępuj katalogu głównego; nie zmieniaj wpisów równolegle ze sprzątaniem.
 API nie chroni przed wrogimi zmianami systemu plików, a śmierć procesu nie usuwa katalogu.
+
+## Drzewa konfiguracji JSON
+
+[jb/json_tree.h](../../include/jb/json_tree.h) udostępnia własne, modyfikowalne
+drzewo hostowe nad tym samym niemodyfikowalnym parserem JSON.
+`jb_json_tree_create` kopiuje sparsowane poddrzewo, więc jego wejściowe bajty
+i tokeny można potem zwolnić. `jb_json_tree_copy` kopiuje poddrzewo hostowe
+z jawnymi limitami. Wyzeruj wskaźnik wynikowego właściciela i zwolnij go przez
+`jb_json_tree_destroy`; zajęty wynik daje `HAL_ESTATE`. Reprezentacja korzysta
+z płaskiej areny i iteracyjnego przechodzenia także przy głębokim zagnieżdżeniu.
+
+Klucze i stringi zachowują zdekodowane bajty UTF-8, także NUL, bez NFC.
+Liczby zachowują oryginalne tokeny: również integers poza uint64, zapis
+wykładnika i ujemne zero. Import używa istniejącego ścisłego parsera. To API
+nie zmienia zasad komentarzy w manifestach, powtórzonych kluczy ani wartości
+nieskończonych.
+
+Korzeń pożycza `jb_json_tree_root`. Funkcje `type`, `count`, `find`, `at`,
+`key`, `text` i `get_bool` czytają wartości bez konwersji typu. `at` przechodzi
+obiekt w kolejności pól albo wybiera element tablicy; `key` czyta nazwę pola.
+`text` pożycza zdekodowany string albo oryginalny token liczby. Widoki i spany
+wymagają żywego, niezmienionego właściciela. Udana modyfikacja unieważnia
+wszystkie jego widoki i spany, również te do niezmienionych pól.
+
+`jb_json_tree_merge(tree, overlay)` scala obiekty rekurencyjnie. Tablice
+i pozostałe wartości zastępują całą wartość bazową. Istniejące klucze zachowują
+pozycje, a nowe są dopisywane w kolejności overlay. `set` zastępuje całe pole
+obiektu głównego, `erase` usuwa pole, a `append` dopisuje element głównej
+tablicy. Każda operacja kopiuje wartość wejściową, także należącą do zmienianego
+drzewa. Modyfikacja zatwierdza tylko kompletną nową arenę: błąd zachowuje
+poprzednią zawartość i jej widoki. Aby osobno zmienić zagnieżdżony obiekt,
+skopiuj jego widok, zmodyfikuj tego właściciela i ustaw go ponownie w rodzicu.
+
+`jb_json_tree_limits_t` ogranicza liczbę wartości wyniku, głębokość kontenerów,
+łączną liczbę bajtów zdekodowanych kluczy/stringów i liczb oraz pracę porównań
+kluczy. Skalar ma głębokość zero; zero nigdy nie oznacza braku limitu.
+Przekroczenie limitu daje `HAL_EOVERFLOW`, brak pamięci `HAL_ENOMEM`, brak pola
+`HAL_ENOENT`, a niewłaściwy rodzaj wartości `HAL_ETYPE`. Zwykłe odczyty zachowują
+wyniki przy błędzie. Niezależne drzewa mogą działać równolegle; modyfikacja
+wspólnego właściciela wymaga serializacji przez wywołującego.
+
+`jb_json_tree_format` zapisuje poddrzewo przez `jb_json_sink_fn`. `indent`
+przyjmuje 0 dla zapisu zwartego albo 2/4 spacje dla plików repozytorium.
+`sort_keys` porządkuje zdekodowane klucze według punktów kodowych Unicode,
+a `ensure_ascii` zapisuje małe cyfry szesnastkowe w sekwencjach Unicode,
+w tym pary surogatów dla znaków spoza BMP. Zapis z wcięciami używa odstępów
+i krótkich sekwencji sterujących jak Python, zachowując oryginalne tokeny
+liczb. Puste kontenery pozostają `{}` i `[]`. Wynik nie ma końcowego LF ani
+NUL; wywołujący dodaje je, jeśli wymaga tego format pliku.
+
+Formatter używa podstawowego writera do zapisu stringów. Limit bajtów obejmuje
+odstępy i sekwencje specjalne. Sink przyjmuje całą porcję, nie zachowuje
+buforów, nie modyfikuje ani nie wywołuje ponownie formatowanego drzewa
+i nie może rzucać wyjątków. `written` liczy przyjęte bajty także wtedy,
+gdy późniejszy zapis zawiedzie. Wcześniejsze porcje mogą już być wysłane;
+strumieniowy writer atomowy pozwala nie publikować częściowego pliku po
+błędzie formatowania. Błędy sinka są przekazywane, a niezdefiniowane statusy
+dają `HAL_EINTERNAL`.
 
 ## Szczegóły platform
 

@@ -3,6 +3,7 @@
 
 #include "../src/host/support.h"
 #include "jb/file.h"
+#include "jb/json_tree.h"
 #include "jb/process.h"
 #include "unity.h"
 #include <chrono>
@@ -11,6 +12,7 @@
 #include <cstring>
 #include <filesystem>
 #include <jb/array.h>
+#include <memory>
 #include <new>
 #include <string>
 #include <thread>
@@ -69,6 +71,20 @@ void *operator new(std::size_t size) {
   throw std::bad_alloc();
 }
 void *operator new[](std::size_t size) { return ::operator new(size); }
+// STL temporary buffers also use nothrow new. Route them through the same
+// allocator so fault injection and ASan see matching allocation/deallocation.
+void *operator new(std::size_t size, const std::nothrow_t &) noexcept {
+  try {
+    return ::operator new(size);
+  } catch (const std::bad_alloc &) {
+    return nullptr;
+  }
+}
+void *operator new[](std::size_t size, const std::nothrow_t &tag) noexcept {
+  return ::operator new(size, tag);
+}
+void operator delete(void *memory, const std::nothrow_t &) noexcept { ::operator delete(memory); }
+void operator delete[](void *memory, const std::nothrow_t &) noexcept { ::operator delete(memory); }
 void operator delete(void *memory) noexcept { std::free(memory); }
 void operator delete[](void *memory) noexcept { ::operator delete(memory); }
 void operator delete(void *memory, std::size_t) noexcept { ::operator delete(memory); }
@@ -313,8 +329,16 @@ static int process_child(int argc, char **argv) {
       return 101;
     unsigned char bytes[4096];
     std::memset(bytes, 17, sizeof(bytes));
-    if (std::fwrite(bytes, 1, 1, stdout) != 1 || std::fflush(stdout) != 0 ||
-        std::fwrite(bytes, 1, sizeof(bytes), stdout) != sizeof(bytes) ||
+    if (std::fwrite(bytes, 1, 1, stdout) != 1 || std::fflush(stdout) != 0)
+      return 102;
+    // Keep the child alive until the callback starts observing completion.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (!fs::exists("completion.allow")) {
+      if (std::chrono::steady_clock::now() >= deadline)
+        return 103;
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    if (std::fwrite(bytes, 1, sizeof(bytes), stdout) != sizeof(bytes) ||
         std::fwrite(bytes, 1, sizeof(bytes), stderr) != sizeof(bytes))
       return 102;
     return 37;
@@ -1163,7 +1187,7 @@ static void test_new_file_owners_validate_inputs_and_cleanup_on_oom() {
 }
 
 struct completed_output {
-  std::string pid_path;
+  std::string pid_path, gate_path;
   std::chrono::steady_clock::time_point deadline;
   size_t bytes[2]{};
   bool observed = false, cancel = false;
@@ -1181,6 +1205,9 @@ static hal_status_t completed_output_callback(void *context, jb_process_stream_t
       return HAL_EIO;
     const auto pid = std::stoul(std::string(reinterpret_cast<char *>(bytes.data), bytes.length));
     jb_file_release(&bytes);
+    bool changed = false;
+    if (jb_file_write_atomic(state.gate_path.c_str(), "go", 2, false, &changed) != HAL_OK)
+      return HAL_EIO;
 #ifdef _WIN32
     HANDLE handle = OpenProcess(SYNCHRONIZE, FALSE, static_cast<DWORD>(pid));
     if (handle == nullptr)
@@ -1215,7 +1242,9 @@ static void test_completed_process_wins_deadline_and_drains_queued_output() {
   for (bool cancellation : {false, true}) {
     completed_output state;
     state.pid_path = (root / "completion.pid").u8string();
+    state.gate_path = (root / "completion.allow").u8string();
     fs::remove(fs::u8path(state.pid_path));
+    fs::remove(fs::u8path(state.gate_path));
     auto options = process_options(args, cwd);
     options.timeout_ms = cancellation ? 0 : 2000;
     state.deadline =
@@ -1329,6 +1358,227 @@ static void test_host_error_mapping_and_process_start_errors() {
 #endif
 }
 
+using tree_owner = std::unique_ptr<jb_json_tree_t, decltype(&jb_json_tree_destroy)>;
+static const jb_json_tree_limits_t tree_limits{4096, 256, 1024 * 1024, 1024 * 1024};
+
+static tree_owner configuration_tree(const std::string &input,
+                                     const jb_json_tree_limits_t &limits = tree_limits) {
+  const jb_json_limits_t parsing{input.size(), 4096, 256,        input.size(),
+                                 input.size(), 4096, 1024 * 1024};
+  size_t bytes = 0;
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_parse_workspace_size(&parsing, &bytes));
+  std::vector<unsigned char> scratch(bytes);
+  jb_json_requirements_t measured{};
+  const jb_json_span_t source{input.data(), input.size()};
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_measure(source, &parsing, {scratch.data(), scratch.size()},
+                                            &measured, nullptr));
+  std::vector<jb_json_token_t> tokens(measured.node_count);
+  jb_json_doc_t document{};
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_parse(source, &parsing, tokens.data(), tokens.size(),
+                                          {scratch.data(), scratch.size()}, &document, nullptr));
+  jb_json_node_t value{};
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_root(&document, &value));
+  jb_json_tree_t *owned = nullptr;
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_tree_create(value, &limits, &owned));
+  return tree_owner(owned, jb_json_tree_destroy);
+}
+
+static jb_json_tree_view_t tree_root(const tree_owner &tree) {
+  jb_json_tree_view_t value{};
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_tree_root(tree.get(), &value));
+  return value;
+}
+
+static hal_status_t append_tree_text(void *user, const char *bytes, size_t length) {
+  static_cast<std::string *>(user)->append(bytes, length);
+  return HAL_OK;
+}
+
+static std::string formatted_tree(jb_json_tree_view_t value, uint32_t indent = 0,
+                                  bool sorted = false, bool ascii = false) {
+  std::string output;
+  size_t written = SIZE_MAX;
+  const jb_json_tree_format_t options{1024 * 1024, indent, sorted, ascii};
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    jb_json_tree_format(value, &options, append_tree_text, &output, &written));
+  TEST_ASSERT_EQUAL(output.size(), written);
+  return output;
+}
+
+// Manifest overlays must replace definition arrays and retain untouched defaults,
+// field order and exact numeric tokens used in generated-artifact hashes.
+static void test_configuration_merge_owns_values_and_preserves_manifest_semantics() {
+  auto base = configuration_tree(
+      R"({"target":"rp2040","cmake":{"cache":{"n":18446744073709551616,"keep":true},"defines":["A","B"]},"zero":-0.00e+0})");
+  auto overlay =
+      configuration_tree(R"({"cmake":{"cache":{"more":"ż"},"defines":["C"]},"new":null})");
+  jb_json_tree_t *raw = nullptr;
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_tree_copy(tree_root(base), &tree_limits, &raw));
+  tree_owner copy(raw, jb_json_tree_destroy);
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_tree_merge(base.get(), tree_root(overlay)));
+  overlay.reset();
+  const std::string merged = formatted_tree(tree_root(base));
+  TEST_ASSERT_EQUAL_STRING(
+      R"({"target":"rp2040","cmake":{"cache":{"n":18446744073709551616,"keep":true,"more":"ż"},"defines":["C"]},"zero":-0.00e+0,"new":null})",
+      merged.c_str());
+  TEST_ASSERT_EQUAL_STRING(
+      R"({"target":"rp2040","cmake":{"cache":{"n":18446744073709551616,"keep":true},"defines":["A","B"]},"zero":-0.00e+0})",
+      formatted_tree(tree_root(copy)).c_str());
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_tree_merge(base.get(), tree_root(base)));
+  TEST_ASSERT_EQUAL_STRING(merged.c_str(), formatted_tree(tree_root(base)).c_str());
+  jb_json_tree_view_t member{}, number{};
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_tree_at(tree_root(base), 2, &member));
+  jb_json_span_t text{};
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_tree_key(member, &text));
+  TEST_ASSERT_EQUAL(4, text.length);
+  TEST_ASSERT_EQUAL_MEMORY("zero", text.data, text.length);
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_tree_text(member, &text));
+  TEST_ASSERT_EQUAL(8, text.length);
+  TEST_ASSERT_EQUAL_MEMORY("-0.00e+0", text.data, text.length);
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_tree_find(tree_root(base), {"cmake", 5}, &member));
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_tree_find(member, {"cache", 5}, &member));
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_tree_find(member, {"n", 1}, &number));
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_tree_text(number, &text));
+  TEST_ASSERT_EQUAL(20, text.length);
+  TEST_ASSERT_EQUAL_MEMORY("18446744073709551616", text.data, text.length);
+  auto replacement = configuration_tree("[false]");
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_tree_merge(base.get(), tree_root(replacement)));
+  TEST_ASSERT_EQUAL_STRING("[false]", formatted_tree(tree_root(base)).c_str());
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_tree_at(tree_root(base), 0, &member));
+  bool boolean = true;
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_tree_get_bool(member, &boolean));
+  TEST_ASSERT_FALSE(boolean);
+}
+
+static void test_configuration_mutations_copy_self_values_and_preserve_empty_keys() {
+  auto tree = configuration_tree(R"({"a":{"old":1},"keep":2,"":null,"a\u0000b":true})");
+  auto replacement = configuration_tree(R"({"new":3})");
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_tree_set(tree.get(), {"a", 1}, tree_root(replacement)));
+  TEST_ASSERT_EQUAL_STRING(R"({"a":{"new":3},"keep":2,"":null,"a\u0000b":true})",
+                           formatted_tree(tree_root(tree)).c_str());
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_tree_set(tree.get(), {"copy", 4}, tree_root(tree)));
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_tree_erase(tree.get(), {nullptr, 0}));
+  TEST_ASSERT_EQUAL_STRING(
+      R"({"a":{"new":3},"keep":2,"a\u0000b":true,"copy":{"a":{"new":3},"keep":2,"":null,"a\u0000b":true}})",
+      formatted_tree(tree_root(tree)).c_str());
+  jb_json_tree_view_t value{};
+  const char key[] = {'a', 0, 'b'};
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_tree_find(tree_root(tree), {key, sizeof(key)}, &value));
+  bool boolean = false;
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_tree_get_bool(value, &boolean));
+  TEST_ASSERT_TRUE(boolean);
+  auto array = configuration_tree("[1]");
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_tree_append(array.get(), tree_root(array)));
+  TEST_ASSERT_EQUAL_STRING("[1,[1]]", formatted_tree(tree_root(array)).c_str());
+  const auto old = formatted_tree(tree_root(tree));
+  TEST_ASSERT_EQUAL(HAL_ENOENT, jb_json_tree_erase(tree.get(), {"absent", 6}));
+  TEST_ASSERT_EQUAL(HAL_ETYPE, jb_json_tree_append(tree.get(), tree_root(array)));
+  TEST_ASSERT_EQUAL(HAL_EPROTO, jb_json_tree_set(tree.get(), {"\xff", 1}, tree_root(array)));
+  TEST_ASSERT_EQUAL_STRING(old.c_str(), formatted_tree(tree_root(tree)).c_str());
+}
+
+// These are the byte formats used by Python json.dumps for repository files:
+// pretty indentation, scalar key order, ASCII escapes and short controls.
+static void test_configuration_formatting_matches_repository_json_bytes() {
+  auto tree =
+      configuration_tree(R"({"ż":"😀\n\b\f\r\t\u0000\u007f","a":[1e+03,{},[]],"\\u000a":"\\n"})");
+  const std::string pretty = formatted_tree(tree_root(tree), 2, true, true);
+  TEST_ASSERT_EQUAL_STRING(
+      "{\n  \"\\\\u000a\": \"\\\\n\",\n  \"a\": [\n    1e+03,\n    {},\n    []\n  ],\n  "
+      "\"\\u017c\": \"\\ud83d\\ude00\\n\\b\\f\\r\\t\\u0000\\u007f\"\n}",
+      pretty.c_str());
+  const std::string wide = formatted_tree(tree_root(tree), 4, false, false);
+  TEST_ASSERT_TRUE(wide.find("\n    \"ż\": \"😀\\n\\b\\f\\r\\t\\u0000\x7f\"") != std::string::npos);
+  TEST_ASSERT_TRUE(wide.find("\n        1e+03,") != std::string::npos);
+  const std::string ordered = formatted_tree(tree_root(tree));
+  TEST_ASSERT_TRUE(ordered.find("{\"ż\":") == 0);
+  auto empty = configuration_tree("{}");
+  TEST_ASSERT_EQUAL_STRING("{}", formatted_tree(tree_root(empty), 4).c_str());
+  size_t written = 123;
+  std::string sink;
+  jb_json_tree_format_t options{4, 0, false, false};
+  auto linefeed = configuration_tree(R"("\n")");
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_tree_format(tree_root(linefeed), &options, append_tree_text,
+                                                &sink, &written));
+  TEST_ASSERT_EQUAL_STRING("\"\\n\"", sink.c_str());
+  options.indent = 3;
+  written = 99;
+  TEST_ASSERT_EQUAL(HAL_EINVAL, jb_json_tree_format(tree_root(tree), &options, append_tree_text,
+                                                    &sink, &written));
+  TEST_ASSERT_EQUAL(99, written);
+}
+
+static hal_status_t reject_tree_output(void *, const char *, size_t) { return HAL_EIO; }
+
+static void test_configuration_limits_and_sink_errors_do_not_publish_partial_mutations() {
+  const jb_json_tree_limits_t limits{3, 1, 5, 100};
+  auto tree = configuration_tree(R"({"a":1})", limits);
+  auto big = configuration_tree("[1,2,3]");
+  const auto before = formatted_tree(tree_root(tree));
+  TEST_ASSERT_EQUAL(HAL_EOVERFLOW, jb_json_tree_set(tree.get(), {"a", 1}, tree_root(big)));
+  TEST_ASSERT_EQUAL(HAL_EOVERFLOW, jb_json_tree_set(tree.get(), {"longkey", 7}, tree_root(big)));
+  TEST_ASSERT_EQUAL_STRING(before.c_str(), formatted_tree(tree_root(tree)).c_str());
+  auto simple = configuration_tree("0");
+  jb_json_tree_t *out = nullptr;
+  const jb_json_tree_limits_t zero{};
+  TEST_ASSERT_EQUAL(HAL_EOVERFLOW, jb_json_tree_copy(tree_root(simple), &zero, &out));
+  TEST_ASSERT_NULL(out);
+  const jb_json_tree_limits_t scalar{1, 0, 1, 0};
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_tree_copy(tree_root(simple), &scalar, &out));
+  jb_json_tree_destroy(out);
+  const jb_json_tree_limits_t no_work{5, 2, 100, 0};
+  auto constrained = configuration_tree(R"({"a":1})", no_work);
+  jb_json_tree_view_t sentinel{simple.get(), 0};
+  TEST_ASSERT_EQUAL(HAL_EOVERFLOW, jb_json_tree_find(tree_root(constrained), {"a", 1}, &sentinel));
+  TEST_ASSERT_TRUE(sentinel.tree == simple.get());
+  size_t written = SIZE_MAX;
+  const jb_json_tree_format_t format{100, 0, false, false};
+  TEST_ASSERT_EQUAL(HAL_EIO, jb_json_tree_format(tree_root(tree), &format, reject_tree_output,
+                                                 nullptr, &written));
+  TEST_ASSERT_EQUAL(0, written);
+  const jb_json_tree_format_t tiny{1, 0, false, false};
+  std::string partial;
+  TEST_ASSERT_EQUAL(HAL_EOVERFLOW, jb_json_tree_format(tree_root(tree), &tiny, append_tree_text,
+                                                       &partial, &written));
+  TEST_ASSERT_EQUAL(partial.size(), written);
+  TEST_ASSERT_EQUAL_STRING(before.c_str(), formatted_tree(tree_root(tree)).c_str());
+  std::string nested(256, '[');
+  nested += "0";
+  nested.append(256, ']');
+  auto deep = configuration_tree(nested);
+  TEST_ASSERT_EQUAL_STRING(nested.c_str(), formatted_tree(tree_root(deep)).c_str());
+}
+
+#ifndef JB_NO_ALLOCATION_FAULTS
+static void test_configuration_allocation_failures_preserve_owners_and_values() {
+  auto base = configuration_tree(R"({"a":{"x":[1,2]},"b":"ż"})");
+  auto overlay = configuration_tree(R"({"a":{"y":[3,4]},"new":true})");
+  const auto original = formatted_tree(tree_root(base));
+  bool completed = false;
+  for (size_t failure = 1; failure < 256; ++failure) {
+    jb_json_tree_t *raw = nullptr;
+    TEST_ASSERT_EQUAL(HAL_OK, jb_json_tree_copy(tree_root(base), &tree_limits, &raw));
+    tree_owner copy(raw, jb_json_tree_destroy);
+    fail_allocation = failure;
+    const auto status = jb_json_tree_merge(copy.get(), tree_root(overlay));
+    fail_allocation = 0;
+    if (status == HAL_OK) {
+      completed = true;
+      break;
+    }
+    TEST_ASSERT_EQUAL(HAL_ENOMEM, status);
+    TEST_ASSERT_EQUAL_STRING(original.c_str(), formatted_tree(tree_root(copy)).c_str());
+  }
+  TEST_ASSERT_TRUE(completed);
+  jb_json_tree_t *out = nullptr;
+  fail_allocation = 1;
+  const auto status = jb_json_tree_copy(tree_root(base), &tree_limits, &out);
+  fail_allocation = 0;
+  TEST_ASSERT_EQUAL(HAL_ENOMEM, status);
+  TEST_ASSERT_NULL(out);
+}
+#endif
+
 static int host_main(int argc, char **argv) {
   self = fs::absolute(fs::u8path(argv[0])).u8string();
   if (argc >= 3 && std::strcmp(argv[1], "--child") == 0)
@@ -1362,6 +1612,13 @@ static int host_main(int argc, char **argv) {
   RUN_TEST(test_completed_process_wins_deadline_and_drains_queued_output);
   RUN_TEST(test_busy_executable_reports_native_error);
   RUN_TEST(test_host_error_mapping_and_process_start_errors);
+  RUN_TEST(test_configuration_merge_owns_values_and_preserves_manifest_semantics);
+  RUN_TEST(test_configuration_mutations_copy_self_values_and_preserve_empty_keys);
+  RUN_TEST(test_configuration_formatting_matches_repository_json_bytes);
+  RUN_TEST(test_configuration_limits_and_sink_errors_do_not_publish_partial_mutations);
+#ifndef JB_NO_ALLOCATION_FAULTS
+  RUN_TEST(test_configuration_allocation_failures_preserve_owners_and_values);
+#endif
   const int result = UNITY_END();
   fs::remove_all(root);
   return result;

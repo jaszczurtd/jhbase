@@ -1,4 +1,4 @@
-# Host files and processes
+# Host files, processes and JSON configuration
 
 The `jb/file.h` API reads files, resolves UTF-8 paths and publishes complete
 output files on Linux and Windows. Enable `JHBASE_HOST=ON` and link `jb::host`.
@@ -96,7 +96,9 @@ collected and output drained, regardless of its exit code. Inspect `exit_code`
 and, on Linux, `term_signal`. Windows also places OS-forced termination in
 `exit_code`; its numeric value is not an application result on a stopped call. `started` can be true for a Linux exec failure,
 which remains an API error with `native_error` rather than an exit-code 127
-success. Invalid input and callback errors have no native OS error code.
+success. The fork-side reporter finishes with 127 before cleanup signals are
+sent, preserving the native error and collected exit fields. Invalid input
+and callback errors have no native OS error code.
 A timeout or cancellation chosen before exit is observed remains the API status
 if the child exits naturally during cleanup. Thus `HAL_ETIMEOUT` with `exited=true`
 and Linux `term_signal=0` is valid; the exit fields describe the collected child,
@@ -181,6 +183,61 @@ and nulls the owner; failure retains it for retry and can leave partial cleanup.
 NULL pointer/owner is allowed. Do not rename/replace the owned root or modify
 entries concurrently with cleanup. This API does not defend against hostile
 filesystem changes, and process death does not remove the directory.
+
+## JSON configuration trees
+
+[jb/json_tree.h](../../include/jb/json_tree.h) provides an owned, mutable host
+tree over the same immutable JSON parser. `jb_json_tree_create` copies a parsed
+subtree, so its input bytes and tokens may be released afterwards.
+`jb_json_tree_copy` copies a host subtree under explicit limits. Initialize the
+output owner to NULL and release it with `jb_json_tree_destroy`; an occupied
+output gives `HAL_ESTATE`. The representation uses a flat arena and iterative
+traversal, including for deeply nested configuration.
+
+Keys and strings retain their decoded UTF-8 bytes, including NUL, without NFC.
+Numbers retain their original tokens, including integers beyond uint64,
+exponent spelling and negative zero. Import uses the existing strict parser:
+this API does not change the policy for manifest comments, duplicate keys or
+nonfinite values.
+
+Borrow the root through `jb_json_tree_root`. `type`, `count`, `find`, `at`,
+`key`, `text` and `get_bool` read values without coercion. `at` visits an object
+in insertion order or selects an array item; `key` reads an object member name.
+`text` borrows a decoded string or an original number token. Views and spans
+require an alive, unchanged owner. A successful mutation invalidates all of
+that owner's views and spans, including views of untouched members.
+
+`jb_json_tree_merge(tree, overlay)` merges objects recursively. Arrays and all
+other values replace the base value completely. Existing object keys keep
+their positions and new keys append in overlay order. `set` replaces a whole
+root object member, `erase` removes one, and `append` adds a root array item.
+Every operation copies its incoming value, including a value from the tree
+being changed. Mutations publish only a complete new arena: an error preserves
+the previous contents and its views. To change a nested object separately,
+copy its view, modify that owner, then set it back on its parent owner.
+
+`jb_json_tree_limits_t` bounds result nodes, container depth, total decoded
+key/string and number bytes, and key-comparison work. A scalar has depth zero;
+zero never means unlimited. Limits give `HAL_EOVERFLOW`, allocation failures
+`HAL_ENOMEM`, absent members `HAL_ENOENT` and wrong value kinds `HAL_ETYPE`.
+Ordinary read outputs remain unchanged on failure. Independent trees can run
+concurrently; mutation of a shared owner requires caller serialization.
+
+`jb_json_tree_format` writes a subtree to `jb_json_sink_fn`. `indent` accepts
+0 for compact output, or 2/4 spaces for repository JSON files. `sort_keys`
+orders decoded keys by Unicode scalar order; `ensure_ascii` emits lowercase
+Unicode escapes, including surrogate pairs for supplementary scalars. Pretty
+output uses Python-style whitespace and short control escapes while retaining
+the original number tokens. Empty containers remain `{}` and `[]`. Output has
+no trailing LF or NUL; the caller adds either when its file format requires it.
+
+The formatter reuses the core writer for string escaping. Its byte limit
+includes whitespace and escapes. A sink must accept each complete chunk, may
+not retain buffers or mutate/reenter the formatted tree, and must not throw.
+`written` counts accepted bytes even when output later fails. Earlier chunks
+may already have escaped; use the streaming atomic file writer when a failed
+format must not publish a partial file. Actual sink errors are propagated,
+while undefined status values become `HAL_EINTERNAL`.
 
 ## Platform details
 

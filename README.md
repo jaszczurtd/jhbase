@@ -38,7 +38,8 @@ Optional Unicode normalization and character properties use
 `JHBASE_UNICODE=ON` and `jb::unicode`; see [Unicode](doc/en/api.md#unicode).
 JSON Pointer locates values and writes node paths through
 [json_pointer.h](include/jb/json_pointer.h).
-Host file and process operations use `JHBASE_HOST=ON` and `jb::host`; see [host files and processes](doc/en/host.md).
+Host files, processes and owned JSON configuration trees use `JHBASE_HOST=ON`
+and `jb::host`; see [host operations](doc/en/host.md).
 JSON Schema remains outside this prototype.
 The public ABI may still change; integrations should use a reviewed commit pin.
 The [dependencies guide](doc/en/dependencies.md) covers preparation, tool pins,

@@ -354,6 +354,18 @@ void make_pipe(descriptor (&fds)[2]) {
     }
 }
 
+bool child_exited(pid_t pid, bool block) {
+  siginfo_t info{};
+  int status;
+  do {
+    status =
+        ::waitid(P_PID, static_cast<id_t>(pid), &info, WEXITED | WNOWAIT | (block ? 0 : WNOHANG));
+  } while (status < 0 && errno == EINTR);
+  if (status < 0)
+    io_error();
+  return info.si_pid != 0;
+}
+
 struct child {
   pid_t pid = -1;
   jb_process_result_t &result;
@@ -474,11 +486,7 @@ void run(const request &req, const control &ctl, jb_process_result_t &result) {
   auto observe = [&] {
     if (result.exited)
       return;
-    siginfo_t info{};
-    if (::waitid(P_PID, static_cast<id_t>(pid), &info, WEXITED | WNOHANG | WNOWAIT) != 0) {
-      if (errno != EINTR)
-        io_error();
-    } else if (info.si_pid != 0) {
+    if (child_exited(pid, false)) {
       owned.collect();
       for (unsigned i = 0; i < 2; ++i) {
         if (!alive[i])
@@ -497,6 +505,11 @@ void run(const request &req, const control &ctl, jb_process_result_t &result) {
       if (count > 0) {
         if (count != sizeof(error))
           throw failure{HAL_EIO};
+        // The fork-side reporter will immediately _exit(127). Let it finish
+        // before cleanup signals, retaining its exit code even if preempted
+        // after writing errno. No executable has started on this path.
+        if (!result.exited)
+          (void)child_exited(pid, true);
         errno = error;
         io_error();
       }
