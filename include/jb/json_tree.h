@@ -41,6 +41,40 @@ typedef struct {
   bool ensure_ascii;       /**< Escape non-ASCII and DEL with lowercase \uXXXX. */
 } jb_json_tree_format_t;
 
+/** Input extensions of jb_json_tree_parse, as the Python HAL tools read files;
+ * zero reads strict JSON.
+ */
+enum {
+  /** Remove // and block comments outside strings before parsing. Removal
+   * leaves no separator, so 1 followed by a comment and 2 reads as 12; an
+   * unterminated block comment ends the input.
+   */
+  JB_JSON_TREE_COMMENTS = 1u << 0,
+  /** A repeated member name keeps the position of its first occurrence and
+   * the value of its last, as a dictionary built by Python's json.loads.
+   * Names are compared as the strict duplicate check compares them, under
+   * parse_limits->max_key_compare_bytes; limits count only the kept members.
+   */
+  JB_JSON_TREE_LAST_DUPLICATE = 1u << 1,
+  /** NaN, Infinity and -Infinity (exact spelling) are number values; their
+   * token is kept and formatted unchanged.
+   */
+  JB_JSON_TREE_NONFINITE = 1u << 2
+};
+
+/** Parse UTF-8 text into an owned tree under parse_limits, then limits.
+ * parse_limits/limits/out are required, *out must be NULL and the input
+ * may be NULL only at length zero. The whole input must be UTF-8 without a
+ * BOM, comments included. Returns HAL_OK, HAL_EINVAL (also for unknown flags),
+ * HAL_ESTATE, HAL_EPROTO for malformed input, HAL_EOVERFLOW for limits or
+ * HAL_ENOMEM. error is optional; on a parse failure it reports the offsets in
+ * the original input, comments included, and after a failure of the tree
+ * limits its code stays NONE. On failure *out is unchanged.
+ */
+hal_status_t jb_json_tree_parse(jb_json_span_t input, const jb_json_limits_t *parse_limits,
+                                const jb_json_tree_limits_t *limits, uint32_t flags,
+                                jb_json_tree_t **out, jb_json_error_t *error);
+
 /** Copy a parsed subtree into an owned host tree; source buffers may then die.
  * limits/out are required and *out must be NULL. Returns HAL_OK, HAL_EINVAL,
  * HAL_ESTATE for an invalid source, HAL_EOVERFLOW for limits, or HAL_ENOMEM.

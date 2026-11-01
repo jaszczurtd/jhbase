@@ -1,6 +1,8 @@
 #include "jb/json_tree.h"
+#include "../json_internal.h"
 #include "support.h"
 #include <algorithm>
+#include <iterator>
 #include <memory>
 #include <numeric>
 #include <string>
@@ -176,15 +178,54 @@ std::string decoded(jb_json_node_t value, bool key, size_t limit) {
   return text;
 }
 
-void import_core(builder &output, jb_json_node_t source) {
-  struct job {
-    jb_json_node_t source;
-    size_t parent, depth;
-    bool key;
-  };
-  std::vector<job> jobs{{source, SIZE_MAX, 0, false}};
+struct import_job {
+  jb_json_node_t source;
+  size_t parent, depth;
+  bool key;
+};
+
+// Name comparisons of the reader, charged like the strict duplicate check.
+struct name_budget {
+  size_t limit, used;
+};
+
+// The name comparison allowance ran out at the member whose opening quote is
+// at offset of the parsed text.
+struct names_exhausted {
+  size_t offset;
+};
+
+// A member name as parsed, escapes included.
+jb_json_span_t raw_key(jb_json_node_t member) {
+  const jb_json_token_t *token = nullptr;
+  require(jb_json_record(member, &token));
+  return {member.doc->input.data + token->key_offset, token->key_length};
+}
+
+// A repeated name keeps its first position and its last value, as a Python
+// dictionary built by json.loads. Each name is compared with the kept ones in
+// order, so unique names cost what the strict check would charge.
+bool replaced_duplicate(std::vector<import_job> &members, jb_json_node_t member,
+                        name_budget &names) {
+  const jb_json_span_t key = raw_key(member);
+  for (auto &prior : members) {
+    bool equal = false;
+    if (jb_json_strings_equal(raw_key(prior.source), key, JB_JSON_TEXT_JSON, names.limit,
+                              &names.used, &equal) != HAL_OK)
+      throw names_exhausted{static_cast<size_t>(key.data - member.doc->input.data) - 1};
+    if (equal) {
+      prior.source = member;
+      return true;
+    }
+  }
+  return false;
+}
+
+// names, when given, merges repeated member names; the parser left them all.
+void import_core(builder &output, jb_json_node_t source, name_budget *names) {
+  std::vector<import_job> jobs{{source, SIZE_MAX, 0, false}};
   while (!jobs.empty()) {
-    const job next = jobs.back();
+    const import_job next = jobs.back();
     jobs.pop_back();
     tree_node value;
     require(jb_json_type(next.source, &value.type));
@@ -207,18 +248,79 @@ void import_core(builder &output, jb_json_node_t source) {
       continue;
     size_t count = 0;
     require(jb_json_count(next.source, &count));
-    output.pending(count, jobs.size());
-    std::vector<job> children;
+    const bool object = value.type == JB_JSON_OBJECT;
+    std::vector<import_job> children;
     jb_json_node_t child{};
     if (count != 0)
       require(jb_json_first(next.source, &child));
     for (size_t i = 0; i < count; ++i) {
-      children.push_back({child, index, next.depth + 1, value.type == JB_JSON_OBJECT});
+      if (!object || names == nullptr || !replaced_duplicate(children, child, *names)) {
+        output.pending(children.size() + 1, jobs.size());
+        children.push_back({child, index, next.depth + 1, object});
+      }
       if (i + 1 < count)
         require(jb_json_next(child, &child));
     }
     jobs.insert(jobs.end(), children.rbegin(), children.rend());
   }
+}
+
+// The comment removal of the Python HAL tools (strip_json_comments), byte for
+// byte: its delimiters are ASCII and never part of a UTF-8 sequence. pieces
+// pair an offset of text with the input offset of the same byte.
+struct uncommented {
+  std::string text;
+  std::vector<std::pair<size_t, size_t>> pieces;
+};
+
+uncommented strip_comments(jb_json_span_t input) {
+  uncommented out;
+  out.text.reserve(input.length);
+  out.pieces.emplace_back(0, 0);
+  const char *bytes = input.data;
+  const size_t length = input.length;
+  bool in_string = false, escaped = false;
+  for (size_t i = 0; i < length;) {
+    const char c = bytes[i];
+    const char next = i + 1 < length ? bytes[i + 1] : '\0';
+    if (in_string) {
+      out.text.push_back(c);
+      if (escaped)
+        escaped = false;
+      else if (c == '\\')
+        escaped = true;
+      else if (c == '"')
+        in_string = false;
+      ++i;
+    } else if (c == '/' && (next == '/' || next == '*')) {
+      i += 2;
+      if (next == '/') {
+        while (i < length && bytes[i] != '\r' && bytes[i] != '\n')
+          ++i;
+      } else {
+        while (i + 1 < length && !(bytes[i] == '*' && bytes[i + 1] == '/'))
+          ++i;
+        i = std::min(i + 2, length);
+      }
+      out.pieces.emplace_back(out.text.size(), i);
+    } else {
+      if (c == '"')
+        in_string = true;
+      out.text.push_back(c);
+      ++i;
+    }
+  }
+  return out;
+}
+
+// The input offset of a byte of the uncommented text; its end is the input's.
+size_t input_offset(const uncommented &source, size_t offset, size_t input_length) {
+  if (offset >= source.text.size())
+    return input_length;
+  const auto piece = std::prev(std::upper_bound(
+      source.pieces.begin(), source.pieces.end(), offset,
+      [](size_t value, const std::pair<size_t, size_t> &entry) { return value < entry.first; }));
+  return piece->second + (offset - piece->first);
 }
 
 void output_owner(jb_json_tree_t **out, const jb_json_tree_limits_t *limits) {
@@ -438,12 +540,80 @@ struct formatter {
 } // namespace
 
 extern "C" {
+hal_status_t jb_json_tree_parse(jb_json_span_t input, const jb_json_limits_t *parse_limits,
+                                const jb_json_tree_limits_t *limits, uint32_t flags,
+                                jb_json_tree_t **out, jb_json_error_t *error) {
+  if (error != nullptr)
+    *error = {JB_JSON_ERROR_NONE, 0, SIZE_MAX, 0};
+  return boundary([&] {
+    output_owner(out, limits);
+    const uint32_t known =
+        JB_JSON_TREE_COMMENTS | JB_JSON_TREE_LAST_DUPLICATE | JB_JSON_TREE_NONFINITE;
+    if (parse_limits == nullptr || (input.data == nullptr && input.length != 0) ||
+        (flags & ~known) != 0)
+      throw failure{HAL_EINVAL};
+    const auto reject = [&](hal_status_t status, jb_json_error_t found) {
+      if (error != nullptr)
+        *error = found;
+      throw failure{status};
+    };
+    if (input.length > parse_limits->max_input_bytes)
+      reject(HAL_EOVERFLOW, {JB_JSON_ERROR_LIMIT, 0, SIZE_MAX, 0});
+    size_t bad = SIZE_MAX;
+    if (jb_utf8_validate(input.data, input.length, &bad) != HAL_OK)
+      reject(HAL_EPROTO, {JB_JSON_ERROR_UTF8, bad, SIZE_MAX, 0});
+    uncommented stripped;
+    jb_json_span_t text = input;
+    if ((flags & JB_JSON_TREE_COMMENTS) != 0) {
+      stripped = strip_comments(input);
+      text = {stripped.text.data(), stripped.text.size()};
+    }
+    uint32_t parse_flags = 0;
+    if ((flags & JB_JSON_TREE_LAST_DUPLICATE) != 0)
+      parse_flags |= JB_JSON_PARSE_DUPLICATE_KEYS;
+    if ((flags & JB_JSON_TREE_NONFINITE) != 0)
+      parse_flags |= JB_JSON_PARSE_NONFINITE;
+    size_t bytes = 0;
+    require(jb_json_parse_workspace_size(parse_limits, &bytes));
+    std::vector<unsigned char> work(bytes);
+    jb_json_error_t found{JB_JSON_ERROR_NONE, 0, SIZE_MAX, 0};
+    const auto check = [&](hal_status_t status) {
+      if (status == HAL_OK)
+        return;
+      if ((flags & JB_JSON_TREE_COMMENTS) != 0) {
+        found.offset = input_offset(stripped, found.offset, input.length);
+        if (found.related_offset != SIZE_MAX)
+          found.related_offset = input_offset(stripped, found.related_offset, input.length);
+      }
+      reject(status, found);
+    };
+    jb_json_requirements_t needed{};
+    check(jb_json_measure_flags(text, parse_limits, parse_flags, {work.data(), work.size()},
+                                &needed, &found));
+    std::vector<jb_json_token_t> tokens(needed.node_count);
+    jb_json_doc_t document{};
+    check(jb_json_parse_flags(text, parse_limits, parse_flags, tokens.data(), tokens.size(),
+                              {work.data(), work.size()}, &document, &found));
+    jb_json_node_t value{};
+    require(jb_json_root(&document, &value));
+    builder result(*limits);
+    name_budget names{parse_limits->max_key_compare_bytes, 0};
+    try {
+      import_core(result, value, (flags & JB_JSON_TREE_LAST_DUPLICATE) != 0 ? &names : nullptr);
+    } catch (const names_exhausted &stop) {
+      found = {JB_JSON_ERROR_LIMIT, stop.offset, SIZE_MAX, 0};
+      check(HAL_EOVERFLOW);
+    }
+    *out = result.tree.release();
+  });
+}
+
 hal_status_t jb_json_tree_create(jb_json_node_t source, const jb_json_tree_limits_t *limits,
                                  jb_json_tree_t **out) {
   return boundary([&] {
     output_owner(out, limits);
     builder result(*limits);
-    import_core(result, source);
+    import_core(result, source, nullptr);
     *out = result.tree.release();
   });
 }

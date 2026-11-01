@@ -4,6 +4,10 @@
 #include "jb/json.h"
 #include "jb/utf8.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef enum { JB_JSON_TEXT_UTF8, JB_JSON_TEXT_JSON, JB_JSON_TEXT_POINTER } jb_json_text_t;
 
 /* Validate a borrowed node before accessing its parser-owned record. */
@@ -26,5 +30,24 @@ hal_status_t jb_json_strings_equal(jb_json_span_t left, jb_json_span_t right,
  * With terminate, required counts a NUL terminator and U+0000 gives HAL_ETYPE. */
 hal_status_t jb_json_copy_string(jb_json_span_t raw, char *buffer, size_t capacity,
                                  size_t *required, bool terminate);
+
+/* Extensions for the host tree reader, as Python's json module reads input;
+ * the public parser accepts neither. DUPLICATE_KEYS publishes every repeated
+ * member without comparing names; the reader compares them under
+ * max_key_compare_bytes. NONFINITE reads NaN, Infinity and -Infinity as number
+ * tokens. */
+enum { JB_JSON_PARSE_DUPLICATE_KEYS = 1u, JB_JSON_PARSE_NONFINITE = 2u };
+/* jb_json_measure and jb_json_parse with extension flags; unknown flags give HAL_EINVAL. */
+hal_status_t jb_json_measure_flags(jb_json_span_t input, const jb_json_limits_t *limits,
+                                   uint32_t flags, jb_json_workspace_t work,
+                                   jb_json_requirements_t *out, jb_json_error_t *error);
+hal_status_t jb_json_parse_flags(jb_json_span_t input, const jb_json_limits_t *limits,
+                                 uint32_t flags, jb_json_token_t *tokens, size_t token_capacity,
+                                 jb_json_workspace_t work, jb_json_doc_t *out_doc,
+                                 jb_json_error_t *error);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -17,6 +17,7 @@ typedef struct {
   size_t capacity, count, position, depth, deepest, compared;
   jb_json_workspace_t work;
   jb_json_error_t *error;
+  uint32_t flags;
   bool measure;
 } parser_t;
 
@@ -147,7 +148,7 @@ static hal_status_t literal(parser_t *p, const char *word, size_t length) {
 }
 
 static hal_status_t unique_key(parser_t *p, const parse_frame_t *parent) {
-  if (p->measure) {
+  if (p->measure || (p->flags & JB_JSON_PARSE_DUPLICATE_KEYS) != 0) {
     return HAL_OK;
   }
   const jb_json_span_t key = {p->input.data + parent->key_offset, parent->key_length};
@@ -171,6 +172,26 @@ static hal_status_t unique_key(parser_t *p, const parse_frame_t *parent) {
     at = old->next_sibling;
   }
   return HAL_OK;
+}
+
+/* NaN, Infinity and -Infinity, spelled as Python's json module reads them. */
+static bool nonfinite_start(const parser_t *p) {
+  const char c = p->input.data[p->position];
+  return (p->flags & JB_JSON_PARSE_NONFINITE) != 0 &&
+         (c == 'N' || c == 'I' ||
+          (c == '-' && p->position + 1 < p->input.length && p->input.data[p->position + 1] == 'I'));
+}
+
+static hal_status_t nonfinite(parser_t *p) {
+  const size_t start = p->position;
+  const char c = p->input.data[start];
+  const hal_status_t status = c == 'N'   ? literal(p, "NaN", 3)
+                              : c == 'I' ? literal(p, "Infinity", 8)
+                                         : literal(p, "-Infinity", 9);
+  if (status == HAL_OK && p->position - start > p->limits->max_number_bytes) {
+    return limit(p, start);
+  }
+  return status;
 }
 
 static hal_status_t value(parser_t *p, parse_frame_t *parent) {
@@ -200,6 +221,9 @@ static hal_status_t value(parser_t *p, parse_frame_t *parent) {
     kind = JB_JSON_STRING;
     size_t raw_offset, raw_length;
     status = scan_string(p, &raw_offset, &raw_length);
+  } else if (nonfinite_start(p)) {
+    kind = JB_JSON_NUMBER;
+    status = nonfinite(p);
   } else if (c == '-' || (c >= '0' && c <= '9')) {
     kind = JB_JSON_NUMBER;
     status = scan_number(p);
@@ -352,10 +376,12 @@ static hal_status_t prepare(parser_t *p) {
   return HAL_OK;
 }
 
-hal_status_t jb_json_measure(jb_json_span_t input, const jb_json_limits_t *limits,
-                             jb_json_workspace_t work, jb_json_requirements_t *out,
-                             jb_json_error_t *error) {
-  if (out == NULL) {
+static const uint32_t known_flags = JB_JSON_PARSE_DUPLICATE_KEYS | JB_JSON_PARSE_NONFINITE;
+
+hal_status_t jb_json_measure_flags(jb_json_span_t input, const jb_json_limits_t *limits,
+                                   uint32_t flags, jb_json_workspace_t work,
+                                   jb_json_requirements_t *out, jb_json_error_t *error) {
+  if (out == NULL || (flags & ~known_flags) != 0) {
     clear_error(error);
     return HAL_EINVAL;
   }
@@ -364,6 +390,7 @@ hal_status_t jb_json_measure(jb_json_span_t input, const jb_json_limits_t *limit
   p.limits = limits;
   p.work = work;
   p.error = error;
+  p.flags = flags;
   p.measure = true;
   hal_status_t status = prepare(&p);
   if (status == HAL_OK) {
@@ -375,11 +402,21 @@ hal_status_t jb_json_measure(jb_json_span_t input, const jb_json_limits_t *limit
   return status;
 }
 
-hal_status_t jb_json_parse(jb_json_span_t input, const jb_json_limits_t *limits,
-                           jb_json_token_t *tokens, size_t token_capacity, jb_json_workspace_t work,
-                           jb_json_doc_t *out_doc, jb_json_error_t *error) {
-  if (out_doc == NULL) {
+hal_status_t jb_json_measure(jb_json_span_t input, const jb_json_limits_t *limits,
+                             jb_json_workspace_t work, jb_json_requirements_t *out,
+                             jb_json_error_t *error) {
+  return jb_json_measure_flags(input, limits, 0, work, out, error);
+}
+
+hal_status_t jb_json_parse_flags(jb_json_span_t input, const jb_json_limits_t *limits,
+                                 uint32_t flags, jb_json_token_t *tokens, size_t token_capacity,
+                                 jb_json_workspace_t work, jb_json_doc_t *out_doc,
+                                 jb_json_error_t *error) {
+  if (out_doc == NULL || (flags & ~known_flags) != 0) {
     clear_error(error);
+    if (out_doc != NULL) {
+      *out_doc = (jb_json_doc_t){0};
+    }
     return HAL_EINVAL;
   }
   *out_doc = (jb_json_doc_t){0};
@@ -390,6 +427,7 @@ hal_status_t jb_json_parse(jb_json_span_t input, const jb_json_limits_t *limits,
   p.capacity = token_capacity;
   p.work = work;
   p.error = error;
+  p.flags = flags;
   hal_status_t status = prepare(&p);
   if (status == HAL_OK) {
     status = run(&p);
@@ -398,6 +436,12 @@ hal_status_t jb_json_parse(jb_json_span_t input, const jb_json_limits_t *limits,
     *out_doc = (jb_json_doc_t){input, tokens, p.count, true};
   }
   return status;
+}
+
+hal_status_t jb_json_parse(jb_json_span_t input, const jb_json_limits_t *limits,
+                           jb_json_token_t *tokens, size_t token_capacity, jb_json_workspace_t work,
+                           jb_json_doc_t *out_doc, jb_json_error_t *error) {
+  return jb_json_parse_flags(input, limits, 0, tokens, token_capacity, work, out_doc, error);
 }
 
 hal_status_t jb_json_locate(jb_json_span_t input, size_t offset, size_t *out_line,

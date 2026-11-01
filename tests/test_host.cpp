@@ -61,10 +61,11 @@ extern "C" int __wrap_kill(pid_t pid, int signal) {
 
 namespace fs = std::filesystem;
 #ifndef JB_NO_ALLOCATION_FAULTS
-static size_t fail_allocation = 0;
+static size_t fail_allocation = 0, allocation_ceiling = SIZE_MAX;
 // Exercise bad_alloc translation at the C API, including temporary-file cleanup.
+// A request above allocation_ceiling fails like an exhausted heap.
 void *operator new(std::size_t size) {
-  if (fail_allocation != 0 && --fail_allocation == 0)
+  if ((fail_allocation != 0 && --fail_allocation == 0) || size > allocation_ceiling)
     throw std::bad_alloc();
   if (void *memory = std::malloc(size == 0 ? 1 : size))
     return memory;
@@ -1508,6 +1509,117 @@ static void test_configuration_formatting_matches_repository_json_bytes() {
   TEST_ASSERT_EQUAL(99, written);
 }
 
+static const uint32_t python_reading =
+    JB_JSON_TREE_COMMENTS | JB_JSON_TREE_LAST_DUPLICATE | JB_JSON_TREE_NONFINITE;
+
+static hal_status_t read_tree(const std::string &input, uint32_t flags, tree_owner &tree,
+                              jb_json_error_t *error = nullptr,
+                              const jb_json_tree_limits_t &limits = tree_limits,
+                              size_t key_compare_bytes = 1024 * 1024) {
+  const jb_json_limits_t parsing{input.size(),     4096, 256, input.size(), input.size(), 4096,
+                                 key_compare_bytes};
+  jb_json_tree_t *owned = nullptr;
+  const auto status =
+      jb_json_tree_parse({input.data(), input.size()}, &parsing, &limits, flags, &owned, error);
+  tree.reset(owned);
+  return status;
+}
+
+static void expect_parse_error(jb_json_error_code_t code, size_t offset, size_t related,
+                               const jb_json_error_t &error) {
+  TEST_ASSERT_EQUAL(code, error.code);
+  TEST_ASSERT_EQUAL(offset, error.offset);
+  TEST_ASSERT_EQUAL(related, error.related_offset);
+}
+
+// The Python HAL tools read VS Code files through strip_json_comments and
+// json.loads; the expected values come from that code.
+static void test_configuration_reader_matches_python_jsonc_loading() {
+  tree_owner tree(nullptr, jb_json_tree_destroy);
+  const struct {
+    std::string input;
+    const char *expected;
+  } accepted[] = {
+      {R"({"url":"http://x//y","glob":"/*.c", // line)"
+       "\n"
+       R"( "n":1 /* block)"
+       "\n"
+       R"( over lines */, "q":"a\"//b"})",
+       R"({"url":"http://x//y","glob":"/*.c","n":1,"q":"a\"//b"})"},
+      {"[1/**/2, tr/* split */ue]", "[12,true]"},
+      {R"({"a":1} /* unterminated)", R"({"a":1})"},
+      {"{\"a\":1}\r// windows\r\n", R"({"a":1})"},
+      {R"({"a":1,"b":2,"a":{"x":3},"a":4})", R"({"a":4,"b":2})"},
+      {R"({"a":{"b":1,"b":2},"a":[3]})", R"({"a":[3]})"},
+      {"[NaN,Infinity,-Infinity]", "[NaN,Infinity,-Infinity]"},
+  };
+  for (const auto &entry : accepted) {
+    TEST_ASSERT_EQUAL(HAL_OK, read_tree(entry.input, python_reading, tree));
+    TEST_ASSERT_EQUAL_STRING(entry.expected, formatted_tree(tree_root(tree)).c_str());
+  }
+  jb_json_tree_view_t value{};
+  jb_json_span_t text{};
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_tree_at(tree_root(tree), 0, &value));
+  TEST_ASSERT_EQUAL(HAL_OK, jb_json_tree_text(value, &text));
+  TEST_ASSERT_EQUAL(3, text.length);
+  TEST_ASSERT_EQUAL_MEMORY("NaN", text.data, text.length);
+
+  // Each extension needs its flag; offsets refer to the file, comments included.
+  jb_json_error_t error{};
+  TEST_ASSERT_EQUAL(HAL_EPROTO, read_tree(R"({"a":1,"a":2})", 0, tree, &error));
+  expect_parse_error(JB_JSON_ERROR_DUPLICATE_KEY, 7, 1, error);
+  TEST_ASSERT_EQUAL(HAL_EPROTO,
+                    read_tree(R"({"a":1 /* x */,"a":2})", JB_JSON_TREE_COMMENTS, tree, &error));
+  expect_parse_error(JB_JSON_ERROR_DUPLICATE_KEY, 15, 1, error);
+  TEST_ASSERT_EQUAL(HAL_EPROTO, read_tree("[NaN]", JB_JSON_TREE_COMMENTS, tree, &error));
+  expect_parse_error(JB_JSON_ERROR_SYNTAX, 1, SIZE_MAX, error);
+  TEST_ASSERT_EQUAL(HAL_EPROTO, read_tree("[1] // c", JB_JSON_TREE_NONFINITE, tree, &error));
+  expect_parse_error(JB_JSON_ERROR_TRAILING_DATA, 4, SIZE_MAX, error);
+  TEST_ASSERT_EQUAL(HAL_EPROTO, read_tree("[-NaN]", python_reading, tree, &error));
+  TEST_ASSERT_EQUAL(JB_JSON_ERROR_SYNTAX, error.code);
+  TEST_ASSERT_EQUAL(HAL_EPROTO, read_tree(R"(/* c */ {"a": x})", python_reading, tree, &error));
+  expect_parse_error(JB_JSON_ERROR_SYNTAX, 14, SIZE_MAX, error);
+  TEST_ASSERT_EQUAL(HAL_EPROTO, read_tree(R"({"a": // c)", python_reading, tree, &error));
+  expect_parse_error(JB_JSON_ERROR_SYNTAX, 10, SIZE_MAX, error);
+  TEST_ASSERT_EQUAL(HAL_EPROTO, read_tree(R"({"a":1}/)", python_reading, tree, &error));
+  expect_parse_error(JB_JSON_ERROR_TRAILING_DATA, 7, SIZE_MAX, error);
+  // Python decodes the whole file before removing comments.
+  TEST_ASSERT_EQUAL(HAL_EPROTO, read_tree("[1] // \xff", python_reading, tree, &error));
+  expect_parse_error(JB_JSON_ERROR_UTF8, 7, SIZE_MAX, error);
+  TEST_ASSERT_EQUAL(HAL_EPROTO, read_tree("\xef\xbb\xbf[1]", python_reading, tree, &error));
+  expect_parse_error(JB_JSON_ERROR_SYNTAX, 0, SIZE_MAX, error);
+  TEST_ASSERT_NULL(tree.get());
+
+  const jb_json_tree_limits_t tight{3, 4, 100, 100};
+  TEST_ASSERT_EQUAL(HAL_EOVERFLOW, read_tree("[1,2,3]", python_reading, tree, &error, tight));
+  TEST_ASSERT_EQUAL(JB_JSON_ERROR_NONE, error.code);
+  // Tree limits count the members left after merging repeated names.
+  const std::string repeated = R"({"a":1,/* c */"a":2})";
+  const jb_json_tree_limits_t two_nodes{2, 1, 100, 0};
+  TEST_ASSERT_EQUAL(HAL_OK, read_tree(repeated, python_reading, tree, &error, two_nodes));
+  TEST_ASSERT_EQUAL_STRING(R"({"a":2})", formatted_tree(tree_root(tree)).c_str());
+  const jb_json_tree_limits_t one_node{1, 1, 100, 0};
+  TEST_ASSERT_EQUAL(HAL_EOVERFLOW, read_tree(repeated, python_reading, tree, &error, one_node));
+  TEST_ASSERT_EQUAL(JB_JSON_ERROR_NONE, error.code);
+  // Merging compares names under the parse allowance, at the strict check's cost.
+  TEST_ASSERT_EQUAL(HAL_EOVERFLOW, read_tree(repeated, python_reading, tree, &error, two_nodes, 0));
+  expect_parse_error(JB_JSON_ERROR_LIMIT, 14, SIZE_MAX, error);
+  TEST_ASSERT_EQUAL(HAL_EOVERFLOW, read_tree(repeated, python_reading, tree, &error, two_nodes, 2));
+  TEST_ASSERT_EQUAL(HAL_OK, read_tree(repeated, python_reading, tree, &error, two_nodes, 3));
+  for (const uint32_t flags : {0u, python_reading}) {
+    TEST_ASSERT_EQUAL(HAL_EOVERFLOW,
+                      read_tree(R"({"a":1,"b":2})", flags, tree, &error, tree_limits, 2));
+    TEST_ASSERT_EQUAL(HAL_OK, read_tree(R"({"a":1,"b":2})", flags, tree, &error, tree_limits, 3));
+  }
+  TEST_ASSERT_EQUAL(HAL_EINVAL, read_tree("[1]", python_reading << 1, tree, &error));
+  auto existing = configuration_tree("[1]");
+  jb_json_tree_t *owned = existing.get();
+  const jb_json_limits_t parsing{3, 4, 4, 3, 3, 4, 100};
+  TEST_ASSERT_EQUAL(HAL_ESTATE,
+                    jb_json_tree_parse({"[1]", 3}, &parsing, &tree_limits, 0, &owned, nullptr));
+  TEST_ASSERT_TRUE(owned == existing.get());
+}
+
 static hal_status_t reject_tree_output(void *, const char *, size_t) { return HAL_EIO; }
 
 static void test_configuration_limits_and_sink_errors_do_not_publish_partial_mutations() {
@@ -1576,6 +1688,35 @@ static void test_configuration_allocation_failures_preserve_owners_and_values() 
   fail_allocation = 0;
   TEST_ASSERT_EQUAL(HAL_ENOMEM, status);
   TEST_ASSERT_NULL(out);
+  const std::string commented = R"({"a":1, /* c */ "a":{"x":[NaN]}, "b":"ż"})";
+  completed = false;
+  for (size_t failure = 1; failure < 256; ++failure) {
+    tree_owner read(nullptr, jb_json_tree_destroy);
+    fail_allocation = failure;
+    const auto parsed = read_tree(commented, python_reading, read);
+    fail_allocation = 0;
+    if (parsed == HAL_OK) {
+      TEST_ASSERT_EQUAL_STRING(R"({"a":{"x":[NaN]},"b":"ż"})",
+                               formatted_tree(tree_root(read)).c_str());
+      completed = true;
+      break;
+    }
+    TEST_ASSERT_EQUAL(HAL_ENOMEM, parsed);
+    TEST_ASSERT_NULL(read.get());
+  }
+  TEST_ASSERT_TRUE(completed);
+  // The second name no longer fits once the first member used the text
+  // allowance; its large value must be refused before it is decoded.
+  const std::string large = "{\"" + std::string(40, 'a') + "\":\"" + std::string(20, 'x') +
+                            "\",\"" + std::string(40, 'b') + "\":\"" + std::string(1000000, 'y') +
+                            "\"}";
+  const jb_json_tree_limits_t small_text{4096, 256, 64, 1024 * 1024};
+  tree_owner read(nullptr, jb_json_tree_destroy);
+  allocation_ceiling = large.size() / 2;
+  const auto bounded = read_tree(large, JB_JSON_TREE_LAST_DUPLICATE, read, nullptr, small_text);
+  allocation_ceiling = SIZE_MAX;
+  TEST_ASSERT_EQUAL(HAL_EOVERFLOW, bounded);
+  TEST_ASSERT_NULL(read.get());
 }
 #endif
 
@@ -1615,6 +1756,7 @@ static int host_main(int argc, char **argv) {
   RUN_TEST(test_configuration_merge_owns_values_and_preserves_manifest_semantics);
   RUN_TEST(test_configuration_mutations_copy_self_values_and_preserve_empty_keys);
   RUN_TEST(test_configuration_formatting_matches_repository_json_bytes);
+  RUN_TEST(test_configuration_reader_matches_python_jsonc_loading);
   RUN_TEST(test_configuration_limits_and_sink_errors_do_not_publish_partial_mutations);
 #ifndef JB_NO_ALLOCATION_FAULTS
   RUN_TEST(test_configuration_allocation_failures_preserve_owners_and_values);

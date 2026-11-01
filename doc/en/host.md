@@ -196,9 +196,30 @@ traversal, including for deeply nested configuration.
 
 Keys and strings retain their decoded UTF-8 bytes, including NUL, without NFC.
 Numbers retain their original tokens, including integers beyond uint64,
-exponent spelling and negative zero. Import uses the existing strict parser:
-this API does not change the policy for manifest comments, duplicate keys or
-nonfinite values.
+exponent spelling and negative zero.
+
+`jb_json_tree_parse` reads a whole file into a new tree in one call: it sizes
+the parser's tokens and scratch itself under `jb_json_limits_t`, then builds
+the tree under `jb_json_tree_limits_t`. With no flags it reads strict JSON like
+`jb_json_parse`. The flags read files the way the Python HAL tools did:
+
+- `JB_JSON_TREE_COMMENTS` removes `//` and `/* */` comments outside strings
+  before parsing. Nothing replaces a comment, so `1/**/2` reads as `12`, and
+  an unterminated block comment ends the input.
+- `JB_JSON_TREE_LAST_DUPLICATE` accepts a repeated member name. The member
+  stays where the name first appeared and takes the value of the last one,
+  as in a dictionary from `json.loads`. Names are compared at the same cost
+  as the strict duplicate check, under `max_key_compare_bytes` of
+  `jb_json_limits_t`. The tree limits count only the members that remain.
+- `JB_JSON_TREE_NONFINITE` accepts `NaN`, `Infinity` and `-Infinity` as number
+  values. Their token stays in the tree and the formatter writes it back
+  unchanged.
+
+The whole input must be UTF-8, comments included, and must not start with a
+BOM; Python rejects both. Unlike Python, a `\u` escape of an unpaired
+surrogate is rejected, and nesting is limited by `max_depth`. Parse errors
+report offsets in the original input, comments included. A failure of the tree
+limits gives `HAL_EOVERFLOW` and leaves the error code `JB_JSON_ERROR_NONE`.
 
 Borrow the root through `jb_json_tree_root`. `type`, `count`, `find`, `at`,
 `key`, `text` and `get_bool` read values without coercion. `at` visits an object

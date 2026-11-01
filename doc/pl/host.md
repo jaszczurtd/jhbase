@@ -199,9 +199,31 @@ z płaskiej areny i iteracyjnego przechodzenia także przy głębokim zagnieżd�
 
 Klucze i stringi zachowują zdekodowane bajty UTF-8, także NUL, bez NFC.
 Liczby zachowują oryginalne tokeny: również integers poza uint64, zapis
-wykładnika i ujemne zero. Import używa istniejącego ścisłego parsera. To API
-nie zmienia zasad komentarzy w manifestach, powtórzonych kluczy ani wartości
-nieskończonych.
+wykładnika i ujemne zero.
+
+`jb_json_tree_parse` wczytuje cały plik do nowego drzewa jednym wywołaniem.
+Sam przydziela tokeny i scratch parsera w granicach `jb_json_limits_t`,
+a potem buduje drzewo w granicach `jb_json_tree_limits_t`. Bez flag czyta
+ścisły JSON tak jak `jb_json_parse`. Flagi odtwarzają sposób, w jaki pliki
+czytały narzędzia HAL w Pythonie:
+
+- `JB_JSON_TREE_COMMENTS` usuwa komentarze `//` i `/* */` poza stringami
+  przed parsowaniem. Komentarz znika bez śladu, więc `1/**/2` daje `12`,
+  a niezamknięty komentarz blokowy kończy dane.
+- `JB_JSON_TREE_LAST_DUPLICATE` przyjmuje powtórzoną nazwę pola. Pole zostaje
+  w miejscu pierwszego wystąpienia i dostaje wartość ostatniego, jak słownik
+  z `json.loads`. Porównanie nazw kosztuje tyle samo co ścisłe wykrywanie
+  duplikatów i podlega `max_key_compare_bytes` z `jb_json_limits_t`. Limity
+  drzewa liczą tylko pola, które zostają.
+- `JB_JSON_TREE_NONFINITE` przyjmuje `NaN`, `Infinity` i `-Infinity` jako
+  liczby. Ich token zostaje w drzewie, a formatter zapisuje go bez zmian.
+
+Całe wejście, łącznie z komentarzami, musi być poprawnym UTF-8 i nie może
+zaczynać się od BOM; Python odrzuca oba przypadki. W odróżnieniu od Pythona
+sekwencja `\u` z niesparowanym surogatem jest odrzucana, a głębokość
+zagnieżdżenia ogranicza `max_depth`. Błędy parsowania podają offsety
+w oryginalnym wejściu, razem z komentarzami. Przekroczenie limitów drzewa daje
+`HAL_EOVERFLOW`, a kod błędu pozostaje `JB_JSON_ERROR_NONE`.
 
 Korzeń pożycza `jb_json_tree_root`. Funkcje `type`, `count`, `find`, `at`,
 `key`, `text` i `get_bool` czytają wartości bez konwersji typu. `at` przechodzi
