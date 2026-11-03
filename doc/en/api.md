@@ -947,3 +947,6 @@ before the first include. Tokens occupy 40 bytes on the 32-bit profile and
 Host modules may use C++17 and heap behind C APIs; every exception must be
 translated to a HAL status before crossing a C boundary. The current portable
 UTF-8 and JSON modules allocate no memory.
+The [C containers](containers.md) allocate only through caller-provided
+callbacks. [Filesystem operations](filesystem.md) form a separate C11 host
+target; other host modules can still require C++17.

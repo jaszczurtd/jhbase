@@ -5,6 +5,7 @@
 #endif
 #include "jb/file.h"
 #include "jb/utf8.h"
+#include "jb/vector.h"
 #include "support.h"
 #include <algorithm>
 #include <cerrno>
@@ -346,25 +347,47 @@ extern "C" hal_status_t jb_file_read(const char *path, size_t max_bytes, jb_file
     const uint64_t initial = open_read(path_from(path), file);
     if (initial > max_bytes)
       throw failure{HAL_EOVERFLOW};
-    std::vector<unsigned char> bytes;
-    bytes.reserve(static_cast<size_t>(initial));
+    struct read_buffer {
+      jb_vector_t value{};
+      ~read_buffer() { jb_vector_destroy(&value); }
+    } bytes;
+    const auto initialized = jb_vector_init(&bytes.value, 1, jb_heap_allocator());
+    if (initialized != HAL_OK)
+      throw failure{initialized};
+    const auto reserved = jb_vector_reserve(&bytes.value, static_cast<size_t>(initial));
+    if (reserved != HAL_OK)
+      throw failure{reserved};
     unsigned char chunk[4096];
     for (;;) {
       const size_t count = read_chunk(file, chunk, sizeof(chunk));
       if (count == 0)
         break;
-      if (count > max_bytes - bytes.size())
+      if (count > max_bytes - jb_vector_size(&bytes.value))
         throw failure{HAL_EOVERFLOW};
-      bytes.insert(bytes.end(), chunk, chunk + count);
+      const size_t required = jb_vector_size(&bytes.value) + count;
+      const size_t current = jb_vector_capacity(&bytes.value);
+      if (required > current) {
+        // Unknown or growing sizes need amortized growth within the caller's limit.
+        const size_t grown = current + std::min(current, max_bytes - current);
+        const auto reserved_more = jb_vector_reserve(&bytes.value, std::max(required, grown));
+        if (reserved_more != HAL_OK)
+          throw failure{reserved_more};
+      }
+      const auto appended = jb_vector_append(&bytes.value, chunk, count);
+      if (appended != HAL_OK)
+        throw failure{appended};
     }
     if (!file.close())
       io_error();
-    auto *data = static_cast<unsigned char *>(std::malloc(bytes.size()));
-    if (data == nullptr && !bytes.empty())
-      throw failure{HAL_ENOMEM};
-    if (!bytes.empty())
-      std::memcpy(data, bytes.data(), bytes.size());
-    *out = {data, bytes.size()};
+    const auto shrunk = jb_vector_shrink_to_fit(&bytes.value);
+    if (shrunk != HAL_OK)
+      throw failure{shrunk};
+    void *data = nullptr;
+    size_t length = 0, capacity = 0;
+    const auto detached = jb_vector_detach(&bytes.value, &data, &length, &capacity);
+    if (detached != HAL_OK)
+      throw failure{detached};
+    *out = {static_cast<unsigned char *>(data), length};
   });
 }
 
@@ -394,26 +417,6 @@ extern "C" hal_status_t jb_file_write_atomic(const char *path, const void *data,
     write_bytes(temp.file, data, length);
     flush_and_close(temp);
     publish_temporary(temp, destination, changed);
-  });
-}
-
-extern "C" hal_status_t jb_path_resolve(const char *base, const char *path, char *buffer,
-                                        size_t capacity, size_t *required) {
-  if (required == nullptr || (buffer == nullptr && capacity != 0))
-    return HAL_EINVAL;
-  return boundary([&] {
-    const fs::path root = path_from(base), part = path_from(path);
-    if (!root.is_absolute() || (part.has_root_name() && !part.is_absolute()))
-      throw failure{HAL_EINVAL};
-    const std::string result = (root / part).lexically_normal().u8string();
-    if (result.size() == SIZE_MAX)
-      throw failure{HAL_EOVERFLOW};
-    *required = result.size() + 1;
-    if (buffer == nullptr)
-      return;
-    if (capacity < *required)
-      throw failure{HAL_EOVERFLOW};
-    std::memcpy(buffer, result.c_str(), *required);
   });
 }
 

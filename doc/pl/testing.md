@@ -7,14 +7,14 @@ wyłącznie własną kopię źródeł.
 
 | Etap | Kontrole |
 | --- | --- |
-| `host` | GCC Release/LTO, testy UTF-8/JSON/liczb/writera/literałów, C++17, niezależna kontrola najkrótszego zapisu, kompilowane literały i przykłady C/C++, odrzucanie błędnego ABI, przykładowe aplikacje C i C++ korzystające z zainstalowanego pakietu. |
+| `host` | GCC Release/LTO, testy UTF-8/JSON/liczb/writera/literałów i kontenerów, operacje systemu plików, C++17, niezależna kontrola najkrótszego zapisu, kompilowane literały i przykłady C/C++, odrzucanie błędnego ABI, przykładowe aplikacje C i C++ korzystające z zainstalowanego pakietu. |
 | `sanitizers` | Clang ASan, UBSan i LeakSanitizer obejmujące bibliotekę i programy testowe. |
 | `memcheck` | Valgrind uruchamia programy testowe, programy sprawdzające literały i przykłady. |
 | `fuzz` | Osobne przebiegi libFuzzer z ustalonym seedem dla parsera/UTF-8, dokładnych liczb/literałów i operacji writera; każdy ma ograniczoną liczbę prób. |
 | `freestanding` | Buduje archiwa profili z `scripts/freestanding.sh` i linkuje program kontrolny. Zapisuje rozmiary i użycie stosu, odrzuca symbole alokacji we własnych obiektach i kompletnym programie. |
 | `comparison` | Przypięte porównanie coreJSON/yyjson z instrumentacją źródeł upstream i właściwego parsera. |
 | `clean` | Pierwszy configure/build/test w kopii źródeł ze spacjami, bez stanu buildu, potem build przyrostowy; wszystko najstarszym obsługiwanym CMake (`third_party/cmake_minimum_version.conf`). Każde `cmake_minimum_required` musi deklarować tę wersję. |
-| `analysis` | cppcheck w wersji z `third_party/cppcheck_version.conf` sprawdza przenośne moduły C i hostowe moduły C++17. |
+| `analysis` | cppcheck w wersji z `third_party/cppcheck_version.conf` sprawdza przenośne moduły C i hostowe moduły C11/C++17. |
 | `quality` | Składnia Bash, clang-format, whitespace źródeł, PMD CPD dla własnego kodu produkcyjnego, testów i przykładów oraz hooki Git sprawdzane w tymczasowym repozytorium (`tests/check_hooks.sh`). |
 
 Profile freestanding obejmują Cortex-M0+ (RP2040), M33 (RP2350 ARM, softfp),
@@ -106,11 +106,25 @@ Windows również sprawdza oba ustawienia modułu dla każdej architektury.
 
 Z `JHBASE_HOST=ON` buildy natywne, sanitizery i Windows sprawdzają też API plików
 hosta: limity odczytu binarnego, ścieżki UTF-8, tryb sprawdzania, sprzątanie plików
-tymczasowych i błędy alokacji na granicy API C. Valgrind uruchamia operacje
-plikowe bez wymuszania błędów alokacji, ponieważ podmienia globalny
-`operator new`. Wymuszanie błędów pozostaje w testach natywnych i sanitizerach.
-Kontrole instalacji kompilują i linkują przykładowe aplikacje korzystające
-z `jb::host` w C oraz C++. Profile freestanding nadal kompilują wyłącznie źródła przenośne.
+tymczasowych i błędy alokacji na granicy API C. Testy natywne i sanitizery stosują
+wspólny licznik awarii dla globalnego `operator new` i testowej implementacji
+`jb_heap_allocator`. Dzięki temu kontrola błędów pozostaje aktywna po przeniesieniu
+operacji z kontenerów C++ do C. Symbol alokatora dostarcza program testowy;
+kod produkcyjny nie ma przełącznika wymuszania awarii. Program hosta dla Valgrinda
+korzysta z produkcyjnego alokatora bez tych podmian, tak jak przykłady
+kontenerów. Test filesystemu dostarcza własny alokator do sprawdzania awarii
+alokacji i liczby niezwróconych bloków.
+
+Regresje filesystemu obejmują junction z końcową kropką/spacją, pliki read-only,
+zmianę wielkości liter nazwy i hardlinki na Windows. Linux sprawdza podmianę
+katalogu na link tuż przed otwarciem, dzieci spoza UTF-8 i przejście poza
+PATH_MAX. Testy mapy ograniczają liczbę porównań wyszukiwania po uporządkowanym
+wstawianiu i usuwaniu, więc wykrywają wyłączenie balansowania AVL.
+
+Kontrole instalacji kompilują i linkują aplikacje C oraz C++ korzystające
+z `jb::host`, a także osobną aplikację C linkowaną wyłącznie z `jb::filesystem`.
+Ta ostatnia pobiera cwd przez API C i zapisuje je do stringa po ustawieniu rozmiaru.
+Profile freestanding nadal kompilują wyłącznie źródła przenośne.
 
 Ten sam program testuje cytowanie argumentów procesów, puste argumenty,
 środowisko UTF-8 i cwd, jednoczesny binarny stdout/stderr, równoległe wywołania,

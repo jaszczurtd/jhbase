@@ -6,6 +6,9 @@ jhbase udostępnia w C11 przenośny dekoder i enkoder UTF-8, parser JSON,
 dokładny odczyt liczb, literały C i sekwencyjny writer JSON. Parser nie zmienia
 wejścia i zachowuje oryginalny zapis liczb. Wywołujący przekazuje pamięć
 na tokeny i scratch.
+[Stringi, wektory i uporządkowane mapy](doc/pl/containers.md) korzystają
+z jawnych alokatorów. [Operacje systemu plików](doc/pl/filesystem.md) mają
+implementację C11 dla Linuksa i Windows.
 
 jhbase definiuje kody statusów (`jb/status.h`) i `COUNTOF` (`jb/array.h`),
 z których korzysta JaszczurHAL. Biblioteka nie konfiguruje ani nie linkuje HAL.

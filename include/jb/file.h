@@ -3,6 +3,7 @@
 
 /** @file file.h
  * Host file operations on UTF-8 paths. Link jb::host (C++17 runtime).
+ * The lexical jb_path_resolve operation also links with the C11 jb::filesystem target.
  * Linux and Windows only; host allocations never enter jb::base.
  * Calls are independent and do not change the process working directory.
  * Windows UTF-16 conversion does not add an extended-length path prefix;

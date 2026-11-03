@@ -178,12 +178,13 @@ function(consumer name prefix library)
   set(dir "${JB_WORK}/${name}")
   set(code "#include <jb/array.h>\n#include <jb/status.h>\n")
   if(library)
-    string(APPEND code "#include <jb/utf8.h>\n#include <jb/json_pointer.h>\n")
+    string(APPEND code "#include <jb/utf8.h>\n#include <jb/json_pointer.h>\n"
+      "#include <jb/string.h>\n#include <jb/vector.h>\n#include <jb/map.h>\n")
     if(JB_UNICODE)
       string(APPEND code "#include <jb/unicode.h>\n")
     endif()
     if(JB_HOST)
-      string(APPEND code "#include <jb/file.h>\n#include <jb/process.h>\n#include <jb/json_tree.h>\n")
+      string(APPEND code "#include <jb/file.h>\n#include <jb/process.h>\n#include <jb/json_tree.h>\n#include <jb/filesystem.h>\n")
     endif()
   endif()
   if(library AND JB_HOST)
@@ -193,7 +194,14 @@ function(consumer name prefix library)
     "  hal_status_t status = (COUNTOF(text) == 3u) ? HAL_OK : HAL_EINVAL;\n")
   if(library)
     if(JB_HOST)
-      string(APPEND code "  jb_file_data_t file = {0, 0};\n"
+      string(APPEND code "  static jb_string_t owned_text;\n"
+        "  if (jb_string_init(&owned_text, jb_heap_allocator()) != HAL_OK) return 9;\n"
+        "  status = jb_string_append(&owned_text, text, 2u);\n"
+        "  if (status != HAL_OK || jb_string_size(&owned_text) != 2u) return 10;\n"
+        "  jb_string_destroy(&owned_text);\n"
+        "  jb_fs_info_t info;\n"
+        "  if (jb_fs_status(\".\", true, &info) != HAL_OK || info.kind != JB_FS_DIRECTORY) return 11;\n"
+        "  jb_file_data_t file = {0, 0};\n"
         "  if (jb_file_read(\"\", 0u, &file) != HAL_EINVAL) return 4;\n"
         "  jb_file_release(&file);\n"
         "  jb_file_writer_t *writer = 0;\n  jb_file_lock_t *lock = 0;\n  jb_temp_dir_t *directory = 0;\n"
@@ -235,6 +243,20 @@ function(consumer name prefix library)
   string(APPEND code "  return hal_status_is_ok(status) ? 0 : 1;\n}\n")
   file(WRITE "${dir}/main.c" "${code}")
   file(WRITE "${dir}/main.cpp" "${code}")
+  if(library AND JB_HOST)
+    file(WRITE "${dir}/filesystem.c" "#include <jb/filesystem.h>\n#include <jb/string.h>\n"
+      "int main(void) {\n  static jb_string_t path;\n  size_t needed = 0;\n"
+      "  hal_status_t status = jb_string_init(&path, jb_heap_allocator());\n"
+      "  if (status == HAL_OK) status = jb_fs_cwd(0, 0u, &needed);\n"
+      "  if (status == HAL_OK && needed > 0u) status = jb_string_resize(&path, needed - 1u, 0);\n"
+      "  if (status == HAL_OK) status = jb_fs_cwd(jb_string_mutable_data(&path), needed, &needed);\n"
+      "  jb_string_destroy(&path);\n  return status == HAL_OK ? 0 : 1;\n}\n")
+    set(filesystem_target "add_executable(consumer_filesystem_c filesystem.c)\n"
+      "target_link_libraries(consumer_filesystem_c PRIVATE jb::filesystem)\n")
+    string(JOIN "" filesystem_target ${filesystem_target})
+  else()
+    set(filesystem_target "")
+  endif()
   set(target jb::status)
   if(library)
     set(target jb::base)
@@ -261,13 +283,18 @@ function(consumer name prefix library)
     "add_executable(consumer_c main.c)\nadd_executable(consumer_cxx main.cpp)\n"
     "target_link_libraries(consumer_c PRIVATE ${target})\n"
     "target_link_libraries(consumer_cxx PRIVATE ${target})\n"
-    "set_target_properties(consumer_c consumer_cxx PROPERTIES C_STANDARD 11 CXX_STANDARD 17)\n")
+    "set_target_properties(consumer_c consumer_cxx PROPERTIES C_STANDARD 11 CXX_STANDARD 17)\n"
+    "${filesystem_target}")
   run("${CMAKE_COMMAND}" -S "${dir}" -B "${dir}/build" -G "${JB_GENERATOR}" ${platform}
     "-DCMAKE_PREFIX_PATH=${prefix}" "-DCMAKE_C_COMPILER=${JB_CC}"
     "-DCMAKE_CXX_COMPILER=${JB_CXX}" "-DCMAKE_BUILD_TYPE=${JB_CONFIG}"
     -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF)
   run("${CMAKE_COMMAND}" --build "${dir}/build" --config "${JB_CONFIG}")
-  foreach(program consumer_c consumer_cxx)
+  set(programs consumer_c consumer_cxx)
+  if(library AND JB_HOST)
+    list(APPEND programs consumer_filesystem_c)
+  endif()
+  foreach(program IN LISTS programs)
     file(GLOB_RECURSE executable "${dir}/build/${program}" "${dir}/build/${program}.exe")
     list(LENGTH executable count)
     if(NOT count EQUAL 1)

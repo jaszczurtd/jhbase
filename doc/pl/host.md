@@ -5,6 +5,9 @@ wynikowe na Linuksie oraz Windows. Włącz `JHBASE_HOST=ON` i linkuj `jb::host`.
 Implementacja wymaga kompilatora i runtime C++17; funkcje publiczne można
 wywoływać z C11. Alokacje hosta i nagłówki systemowe pozostają poza `jb::base`.
 Opcja jest domyślnie wyłączona i wymaga targetu Linux lub Windows.
+Osobny [target filesystem](filesystem.md), `jb::filesystem`, implementuje
+operacje katalogowe i ścieżki w C11 bez runtime C++. Zawiera również
+`jb_path_resolve` i alokator heap dla [kontenerów C](containers.md).
 
 ```sh
 cmake -S . -B .build/host -G Ninja -DCMAKE_BUILD_TYPE=Release -DJHBASE_HOST=ON
@@ -28,7 +31,7 @@ linkami; plik innego rodzaju daje `HAL_ETYPE`. Można wywołać `jb_file_release
 `jb_path_resolve(base, path, buffer, capacity, required)` wymaga jawnej,
 bezwzględnej ścieżki bazowej. Łączy i porządkuje składniki ścieżki bez odczytu
 linków i zmiany katalogu roboczego procesu. Ścieżki podlegają regułom systemu
-hosta i używają UTF-8; na Windows są zamieniane na UTF-16 dla API systemowego.
+hosta i pozostają w UTF-8; ta operacja leksykalna nie wywołuje API Windows z UTF-16.
 Ścieżki względne wobec dysku Windows są odrzucane. `(NULL,0)` mierzy wynik
 wraz z terminatorem NUL. Za mały bufor daje `HAL_EOVERFLOW`; funkcja podaje
 pełny wymagany rozmiar i zachowuje wszystkie bajty bufora.

@@ -23,7 +23,9 @@ another with `JHBASE_HAL_ROOT`. The Unity source hashes are recorded in
 ## Installed package
 
 `cmake --install` writes the headers, the static library and a CMake package:
-`find_package(jhbase)` gives `jb::base` and `jb::status`. The package records
+`find_package(jhbase)` gives `jb::base` and `jb::status`. With `JHBASE_HOST=ON`,
+it also exports the C target `jb::filesystem` and `jb::host`; see
+[filesystem operations](filesystem.md). The package records
 the library revision in `jhbase_REVISION` and the layout of the public headers
 in `jhbase_ABI_PROFILE`, for example `natural-ptr32-status32-bool8`. The
 revision comes from `JHBASE_REVISION`, otherwise from git HEAD of this
@@ -98,8 +100,11 @@ equivalents. Upstream assertions are disabled for this bounded internal
 conversion path; instrumented tests exercise the actual buffered functions.
 
 The freestanding check examines owned object references and the complete
-linked analysis probe, including Ryu and libc, for allocation symbols. A host
-allocation guard also aborts on malloc/calloc/realloc/free during library calls.
+linked analysis probe, including Ryu and libc, for allocation symbols. The host
+allocation guard aborts on malloc/calloc/realloc/free while running the JSON,
+numeric, writer, literal and optional NFC operations in `tests/library_exercise.h`.
+It does not exercise the owned containers: those use an explicitly supplied
+allocator and have separate ownership and allocation-failure checks.
 The link probe has an analysis-only memory map; it is not flashable firmware.
 Measurements on boards use the firmware in `tests/device`, described in
 [testing](testing.md#device-measurements).

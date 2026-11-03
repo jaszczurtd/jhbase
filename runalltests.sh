@@ -131,15 +131,18 @@ sanitizers() {
 
 memcheck() {
   configure "${JB_GATE}/memcheck" -DJHBASE_LTO=ON -DJHBASE_UNICODE=ON
-  for jb_test in test_utf8 test_json test_numbers test_writer test_cxx test_float_format test_allocation \
+  for jb_test in test_utf8 test_json test_numbers test_writer test_containers test_map test_cxx test_float_format test_allocation \
       test_literal_probe_c test_literal_probe_cpp example_json_numbers_c \
       example_json_numbers_cpp example_json_writer_c example_json_writer_cpp \
+      example_containers_c example_containers_cpp \
       test_api_en_c test_api_en_cpp test_api_pl_c test_api_pl_cpp; do
     valgrind --error-exitcode=99 --leak-check=full --show-leak-kinds=all \
       --errors-for-leak-kinds=all "${JB_GATE}/memcheck/${jb_test}"
   done
   valgrind --error-exitcode=99 --leak-check=full --show-leak-kinds=all \
     --errors-for-leak-kinds=all "${JB_GATE}/memcheck/test_host_memcheck" "${JB_GATE}/memcheck/host-files"
+  valgrind --error-exitcode=99 --leak-check=full --show-leak-kinds=all \
+    --errors-for-leak-kinds=all "${JB_GATE}/memcheck/test_filesystem" "${JB_GATE}/memcheck/filesystem-files"
   valgrind --error-exitcode=99 --leak-check=full --show-leak-kinds=all \
     --errors-for-leak-kinds=all "${JB_GATE}/memcheck/test_literals" \
     "${JB_HAL}/tests/fixtures/device_tree/cases.json"
@@ -232,10 +235,10 @@ analysis() {
     --std=c11 --language=c \
     "-I${JB_ROOT}/include" "-I${JB_ROOT}/third_party/ryu" \
     "-I${JB_ROOT}/third_party/utf8proc" -DUTF8PROC_STATIC \
-    "${JB_ROOT}"/src/*.c
+    "${JB_ROOT}"/src/*.c "${JB_ROOT}"/src/host/*.c
   "${JB_TOOLS}/cppcheck/bin/cppcheck" \
     --enable=warning,style,performance,portability --error-exitcode=1 \
-    --std=c++17 --language=c++ "-I${JB_ROOT}/include" "${JB_ROOT}/src/host"
+    --std=c++17 --language=c++ "-I${JB_ROOT}/include" "${JB_ROOT}"/src/host/*.cpp
 }
 
 quality() {
@@ -246,7 +249,7 @@ quality() {
   "${JB_ROOT}/tests/check_hooks.sh"
   clang-format --dry-run --Werror "${JB_ROOT}"/include/jb/*.h \
     "${JB_ROOT}"/src/*.[ch] "${JB_ROOT}"/tests/*.c "${JB_ROOT}"/tests/*.h \
-    "${JB_ROOT}"/tests/*.cpp "${JB_ROOT}"/src/host/*.cpp "${JB_ROOT}"/examples/*.c
+    "${JB_ROOT}"/tests/*.cpp "${JB_ROOT}"/src/host/*.[ch] "${JB_ROOT}"/src/host/*.cpp "${JB_ROOT}"/examples/*.c
   cmake "-DJB_SOURCE=${JB_ROOT}" -P "${JB_ROOT}/tests/check_source.cmake"
   if git -C "$JB_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     git -C "$JB_ROOT" diff --check

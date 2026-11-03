@@ -976,3 +976,6 @@ w 64-bitowym. Te struktury nie są formatem pliku ani transmisji.
 Moduły hostowe mogą korzystać z C++17 i heap za API C; każdy wyjątek musi
 zostać przetłumaczony na status HAL przed przekroczeniem granicy C.
 Obecne przenośne moduły UTF-8 i JSON nie alokują pamięci.
+[Kontenery C](containers.md) alokują wyłącznie przez callbacki wywołującego.
+[Operacje systemu plików](filesystem.md) tworzą osobny target hosta w C11;
+pozostałe moduły hostowe mogą nadal wymagać C++17.

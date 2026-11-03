@@ -1,6 +1,7 @@
 file(MAKE_DIRECTORY "${JB_WORK}")
 set(includes "#include \"jb/json.h\"\n#include \"jb/utf8.h\"\n#include \"jb/json_number.h\"\n#include \"jb/json_writer.h\"\n#include \"jb/literal.h\"\n")
 string(APPEND includes "#include \"jb/file.h\"\n#include \"jb/process.h\"\n#include \"jb/json_tree.h\"\n")
+string(APPEND includes "#include \"jb/allocator.h\"\n#include \"jb/string.h\"\n#include \"jb/vector.h\"\n#include \"jb/map.h\"\n#include \"jb/filesystem.h\"\n")
 
 function(probe name source should_pass language)
   if(language STREQUAL "CXX")
@@ -11,6 +12,9 @@ function(probe name source should_pass language)
     set(compiler "${JB_CC}")
     set(extension c)
     set(standard c11)
+    if(language STREQUAL "C99")
+      set(standard c99)
+    endif()
   endif()
   set(path "${JB_WORK}/${name}.${extension}")
   file(WRITE "${path}" "${source}")
@@ -22,6 +26,10 @@ function(probe name source should_pass language)
     set(args "-std=${standard}" -Wall -Wextra -Werror -pedantic
         "-I${JB_SOURCE}/include" -c
         "${path}" -o "${JB_WORK}/${name}.o" ${ARGN})
+    if(language STREQUAL "C99")
+      # Preserve the existing GCC/Clang C99 extension compatibility of status.h.
+      list(REMOVE_ITEM args -pedantic)
+    endif()
   endif()
   execute_process(COMMAND "${compiler}" ${args}
     RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE errors)
@@ -42,6 +50,14 @@ endfunction()
 
 foreach(language C CXX)
   probe("natural_${language}" "${includes}" TRUE "${language}")
+  if(language STREQUAL "CXX")
+    set(zero "{}")
+  else()
+    set(zero "{0}")
+  endif()
+  probe("container_initializers_${language}"
+        "${includes}\njb_string_t text = ${zero};\njb_vector_t values = ${zero};\njb_map_t map = ${zero};\n"
+        TRUE "${language}")
   probe("pack_before_${language}" "#pragma pack(push, 1)\n${includes}#pragma pack(pop)\n"
         FALSE "${language}")
   probe("pack_between_${language}"
@@ -57,4 +73,7 @@ foreach(language C CXX)
     probe("packed_flag_${language}" "${includes}" FALSE "${language}" -fpack-struct=1)
   endif()
 endforeach()
+if(NOT JB_MSVC)
+  probe(status_c99 "#include \"jb/status.h\"\n" TRUE C99)
+endif()
 message(STATUS "Natural C/C++ layouts accepted; incompatible packing/enum flags rejected")

@@ -1,4 +1,5 @@
 #include "core_json.h"
+#include "jb/allocator.h"
 #include "jb/json.h"
 #include "yyjson.h"
 #include <jb/array.h>
@@ -8,7 +9,7 @@
 
 static jb_json_token_t tokens[256];
 static unsigned char scratch[4097];
-static max_align_t pool[8192];
+static jb_max_align_t pool[8192];
 static const jb_json_limits_t limits = {4096, COUNTOF(tokens), 32, 2048, 2048, 128, 1000000};
 typedef bool (*parse_fn)(jb_json_span_t input);
 static bool native_parse(jb_json_span_t input) {

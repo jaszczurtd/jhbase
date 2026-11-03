@@ -2,9 +2,11 @@
 #include <cmath>
 
 #include "../src/host/support.h"
+#include "jb/allocator.h"
 #include "jb/file.h"
 #include "jb/json_tree.h"
 #include "jb/process.h"
+#include "test_file.h"
 #include "unity.h"
 #include <chrono>
 #include <cstdio>
@@ -24,6 +26,7 @@
 #endif
 #include <fcntl.h>
 #include <io.h>
+#include <share.h>
 #include <windows.h>
 #else
 #include <sys/prctl.h>
@@ -62,10 +65,48 @@ extern "C" int __wrap_kill(pid_t pid, int signal) {
 namespace fs = std::filesystem;
 #ifndef JB_NO_ALLOCATION_FAULTS
 static size_t fail_allocation = 0, allocation_ceiling = SIZE_MAX;
-// Exercise bad_alloc translation at the C API, including temporary-file cleanup.
-// A request above allocation_ceiling fails like an exhausted heap.
+static size_t last_heap_request = 0;
+static size_t heap_requests = 0, heap_requested_bytes = 0, largest_heap_request = 0;
+static const unsigned char growing_file[256 * 1024 + 13] = {0x5a};
+static std::FILE *grow_on_allocation = nullptr;
+static bool file_grown = false;
+// Both C and C++ owners use the same fault sequence at the public C API.
+static bool allocation_fails(size_t size) {
+  return (fail_allocation != 0 && --fail_allocation == 0) || size > allocation_ceiling;
+}
+
+static void *test_heap_allocate(void *context, size_t size) {
+  (void)context;
+  last_heap_request = size;
+  ++heap_requests;
+  heap_requested_bytes += size;
+  if (size > largest_heap_request)
+    largest_heap_request = size;
+  if (grow_on_allocation != nullptr) {
+    // The first buffer allocation occurs after open_read has measured the file.
+    std::FILE *file = grow_on_allocation;
+    grow_on_allocation = nullptr;
+    file_grown = std::fwrite(growing_file + 1, 1, sizeof(growing_file) - 1, file) ==
+                     sizeof(growing_file) - 1 &&
+                 std::fflush(file) == 0;
+  }
+  return allocation_fails(size) ? nullptr : std::malloc(size);
+}
+
+static void test_heap_release(void *context, void *memory) {
+  (void)context;
+  std::free(memory);
+}
+
+// The executable supplies this symbol instead of pulling allocator.c from the
+// static library. The memcheck executable uses the production heap allocator.
+extern "C" const jb_allocator_t *jb_heap_allocator(void) {
+  static const jb_allocator_t allocator{nullptr, test_heap_allocate, test_heap_release};
+  return &allocator;
+}
+
 void *operator new(std::size_t size) {
-  if ((fail_allocation != 0 && --fail_allocation == 0) || size > allocation_ceiling)
+  if (allocation_fails(size))
     throw std::bad_alloc();
   if (void *memory = std::malloc(size == 0 ? 1 : size))
     return memory;
@@ -250,6 +291,48 @@ static void test_links_permissions_and_failed_publication() {
 }
 
 #ifndef JB_NO_ALLOCATION_FAULTS
+static void check_growing_file_read(const std::string &path) {
+  const size_t limits[] = {sizeof(growing_file), sizeof(growing_file) + 37, SIZE_MAX,
+                           sizeof(growing_file) - 1};
+  for (const size_t limit : limits) {
+    bool written = false;
+    TEST_ASSERT_EQUAL(HAL_OK, jb_file_write_atomic(path.c_str(), growing_file, 1, false, &written));
+#ifdef _WIN32
+    // fopen_s denies concurrent readers of a writable file.
+    std::FILE *file = _wfsopen(fs::u8path(path).c_str(), L"ab", _SH_DENYNO);
+#else
+    std::FILE *file = jb_test_file_open(path.c_str(), "ab");
+#endif
+    TEST_ASSERT_NOT_NULL(file);
+    file_grown = false;
+    grow_on_allocation = file;
+    heap_requests = heap_requested_bytes = largest_heap_request = 0;
+    allocation_ceiling = limit;
+    jb_file_data_t data{};
+    const hal_status_t status = jb_file_read(path.c_str(), limit, &data);
+    allocation_ceiling = SIZE_MAX;
+    grow_on_allocation = nullptr;
+    const int closed = std::fclose(file);
+    TEST_ASSERT_EQUAL(0, closed);
+    TEST_ASSERT_TRUE(file_grown);
+    if (limit < sizeof(growing_file)) {
+      TEST_ASSERT_EQUAL(HAL_EOVERFLOW, status);
+      TEST_ASSERT_NULL(data.data);
+      TEST_ASSERT_EQUAL_size_t(0, data.length);
+    } else {
+      TEST_ASSERT_EQUAL(HAL_OK, status);
+      TEST_ASSERT_EQUAL_size_t(sizeof(growing_file), data.length);
+      TEST_ASSERT_EQUAL_MEMORY(growing_file, data.data, sizeof(growing_file));
+      TEST_ASSERT_EQUAL_size_t(data.length, last_heap_request);
+    }
+    jb_file_release(&data);
+    TEST_ASSERT_TRUE(largest_heap_request <= limit);
+    // A linear bound rejects copying the entire prefix on every 4-KiB read.
+    TEST_ASSERT_TRUE(heap_requested_bytes < 8 * sizeof(growing_file));
+    TEST_ASSERT_TRUE(heap_requests < 24);
+  }
+}
+
 static void test_allocation_failure_preserves_outputs_and_cleans_temporary_files() {
   const std::string base = root.u8string();
   size_t required = 42;
@@ -260,6 +343,21 @@ static void test_allocation_failure_preserves_outputs_and_cleans_temporary_files
   TEST_ASSERT_EQUAL(HAL_ENOMEM, path_status);
   TEST_ASSERT_EQUAL(42, required);
   const std::string path = (root / "allocation.json").u8string();
+  static const unsigned char large_file[1000000] = {};
+  bool written = false;
+  TEST_ASSERT_EQUAL(
+      HAL_OK, jb_file_write_atomic(path.c_str(), large_file, sizeof(large_file), false, &written));
+  allocation_ceiling = sizeof(large_file);
+  last_heap_request = 0;
+  jb_file_data_t read{};
+  const hal_status_t read_status = jb_file_read(path.c_str(), sizeof(large_file), &read);
+  allocation_ceiling = SIZE_MAX;
+  TEST_ASSERT_EQUAL(HAL_OK, read_status);
+  TEST_ASSERT_EQUAL_size_t(sizeof(large_file), last_heap_request);
+  TEST_ASSERT_EQUAL_size_t(sizeof(large_file), read.length);
+  TEST_ASSERT_EQUAL_MEMORY(large_file, read.data, sizeof(large_file));
+  jb_file_release(&read);
+  check_growing_file_read(path);
   size_t caught = 0;
   for (size_t fail_at = 1; fail_at <= 48; ++fail_at) {
     bool changed = false;

@@ -6,14 +6,14 @@ corpora stay below `.build/gate`; the `clean` stage replaces only its own copy.
 
 | Stage | Checks |
 | --- | --- |
-| `host` | GCC Release/LTO, UTF-8/JSON/numeric/writer/literal tests, C++17, independent shortest-format checks, compiled C/C++ literals and examples, ABI rejection probes, C and C++ consumers of the installed package. |
+| `host` | GCC Release/LTO, UTF-8/JSON/numeric/writer/literal and container tests, filesystem operations, C++17, independent shortest-format checks, compiled C/C++ literals and examples, ABI rejection probes, C and C++ consumers of the installed package. |
 | `sanitizers` | Clang ASan, UBSan and LeakSanitizer over library and executables. |
 | `memcheck` | Valgrind over the actual test executables, literal probes and examples. |
 | `fuzz` | Separate seeded libFuzzer runs for parser/UTF-8, exact numbers/literals and writer operations; each has a bounded run count. |
 | `freestanding` | Compile and archive each profile from `scripts/freestanding.sh`, then link an analysis probe. Collect sizes/stack usage and reject heap symbols in owned objects and the complete linked probe. |
 | `comparison` | Run the pinned coreJSON/yyjson comparison with instrumented upstream sources and the production parser. |
 | `clean` | First configure/build/test from a source copy with spaces and no build state, then an incremental build, all with the oldest supported CMake (`third_party/cmake_minimum_version.conf`); every `cmake_minimum_required` must declare that version. |
-| `analysis` | The cppcheck build pinned by `third_party/cppcheck_version.conf`, checking portable C and host C++17 modules. |
+| `analysis` | The cppcheck build pinned by `third_party/cppcheck_version.conf`, checking portable C and host C11/C++17 modules. |
 | `quality` | Shell syntax, clang-format, source whitespace, PMD CPD over owned production/test/example code, and the git hooks exercised in a scratch repository (`tests/check_hooks.sh`). |
 
 Freestanding profiles cover Cortex-M0+ (RP2040), M33 (RP2350 ARM, softfp),
@@ -104,11 +104,25 @@ not run production generators.
 
 With `JHBASE_HOST=ON`, native, sanitizer and Windows builds also exercise the
 host file API, including binary limits, UTF-8 paths, check mode, temporary-file
-cleanup and allocation failures at the C API boundary. Valgrind runs the file
-operations without allocation fault injection because it replaces global
-`operator new`; native and sanitizer runs retain that separate check.
-The installed-package checks compile and link both C and C++ consumers of
-`jb::host`. Freestanding profiles continue to compile only portable sources.
+cleanup and allocation failures at the C API boundary. Native and sanitizer
+tests share one failure counter between global `operator new` and a test
+implementation of `jb_heap_allocator`. This keeps the failure checks active
+when an operation moves from C++ storage to the C containers. The test executable
+supplies the allocator symbol; production code has no fault-injection switch.
+The Valgrind host executable uses the production allocator without these
+overrides, as do the container examples. The filesystem test supplies its own
+heap allocator to check allocation failures and outstanding allocations.
+
+Filesystem regressions cover Windows junctions with trailing dots/spaces,
+read-only files, case-only renames and hard links. Linux checks a directory
+replaced with a symlink immediately before opening, native non-UTF-8 children
+and traversal beyond PATH_MAX. Map tests bound lookup comparisons after sorted
+insertion and deletion, so disabling AVL rebalancing is detected.
+
+The installed-package checks compile and link C and C++ consumers of `jb::host`
+and a separate C consumer linked only with `jb::filesystem`. The latter obtains
+cwd through the C API and writes it into a resized string. Freestanding profiles
+continue to compile only portable sources.
 
 The same host test executable checks process argument quoting, empty arguments,
 UTF-8 environment/cwd, simultaneous binary stdout/stderr, parallel calls,

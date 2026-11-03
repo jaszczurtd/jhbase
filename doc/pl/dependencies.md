@@ -24,7 +24,9 @@ zestaw oczekiwanych wyników liczbowych z checkoutu HAL, domyślnie
 ## Zainstalowany pakiet
 
 `cmake --install` zapisuje nagłówki, bibliotekę statyczną i pakiet CMake:
-`find_package(jhbase)` udostępnia `jb::base` i `jb::status`. Pakiet zapisuje
+`find_package(jhbase)` udostępnia `jb::base` i `jb::status`. Z `JHBASE_HOST=ON`
+eksportuje też target C `jb::filesystem` i `jb::host`; zobacz
+[operacje systemu plików](filesystem.md). Pakiet zapisuje
 rewizję biblioteki w `jhbase_REVISION` i układ publicznych nagłówków
 w `jhbase_ABI_PROFILE`, na przykład `natural-ptr32-status32-bool8`. Rewizja
 pochodzi z `JHBASE_REVISION`, a bez niej z git HEAD tego checkoutu, z dopiskiem
@@ -100,8 +102,11 @@ funkcje buforowe.
 
 Kontrola freestanding szuka symboli alokacji w odwołaniach własnych obiektów
 i kompletnym zlinkowanym programie kontrolnym, w tym Ryu i libc.
-Hostowy test przerywa też wykonanie przy malloc/calloc/realloc/free podczas
-wywołań biblioteki. Program kontrolny ma mapę pamięci tylko do analizy; nie jest firmware
+Hostowy test przerywa wykonanie przy malloc/calloc/realloc/free podczas operacji
+JSON, liczb, writera, literałów i opcjonalnego NFC z `tests/library_exercise.h`.
+Nie wykonuje operacji kontenerów będących właścicielami pamięci: te korzystają
+z jawnie przekazanego alokatora i mają osobne kontrole własności oraz błędów alokacji.
+Program kontrolny ma mapę pamięci tylko do analizy; nie jest firmware
 do wgrania na urządzenie. Pomiary na płytkach korzystają z firmware
 w `tests/device`, opisanego w [testach](testing.md#pomiary-na-urządzeniach).
 

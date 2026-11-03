@@ -5,6 +5,9 @@
 jhbase provides a portable C11 UTF-8 decoder/encoder and an immutable JSON
 parser, exact numeric reads, C literals and a sequential JSON writer. Callers
 supply token storage and scratch; the parser preserves original number tokens.
+Owned [strings, vectors and ordered maps](doc/en/containers.md) use explicit
+allocators. [Filesystem operations](doc/en/filesystem.md) provide a C11
+implementation for Linux and Windows.
 
 jhbase defines the status codes (`jb/status.h`) and `COUNTOF` (`jb/array.h`)
 used by JaszczurHAL. The library does not configure or link HAL.

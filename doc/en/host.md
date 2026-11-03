@@ -5,6 +5,9 @@ output files on Linux and Windows. Enable `JHBASE_HOST=ON` and link `jb::host`.
 The implementation requires a C++17 compiler and runtime; its public functions
 can be called from C11. Host allocations and system headers stay outside
 `jb::base`. The option is OFF by default and requires a Linux or Windows target.
+The separate [filesystem target](filesystem.md), `jb::filesystem`, implements
+directory and path operations in C11 without the C++ runtime. It also owns
+`jb_path_resolve` and the heap allocator for [C containers](containers.md).
 
 ```sh
 cmake -S . -B .build/host -G Ninja -DCMAKE_BUILD_TYPE=Release -DJHBASE_HOST=ON
@@ -27,8 +30,8 @@ nonregular files give `HAL_ETYPE`. `jb_file_release(NULL)` is allowed.
 
 `jb_path_resolve(base, path, buffer, capacity, required)` requires an explicit
 absolute base. It joins and normalizes path components without looking up
-links or changing cwd. Paths use host filesystem rules and UTF-8; Windows
-converts them to UTF-16 paths for the system API. Drive-relative Windows paths
+links or changing cwd. Paths use host filesystem rules and stay in UTF-8;
+this lexical operation does not call the Windows UTF-16 API. Drive-relative Windows paths
 are rejected. `(NULL,0)` measures the result including its NUL terminator. A short buffer
 gives `HAL_EOVERFLOW`, reports the full size and leaves every byte untouched.
 
