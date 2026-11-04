@@ -60,6 +60,49 @@ extern "C" int __wrap_kill(pid_t pid, int signal) {
   }
   return __real_kill(pid, signal);
 }
+
+// A requested fsync failure, and a destination replaced by a link right before
+// a mode change, through chmod by path or fchmod by descriptor alike.
+static bool fail_fsync = false;
+static unsigned fsync_calls = 0;
+static std::string swap_path, swap_aside, swap_target;
+extern "C" int __real_fsync(int fd);
+extern "C" int __wrap_fsync(int fd) {
+  ++fsync_calls;
+  if (fail_fsync) {
+    errno = EIO;
+    return -1;
+  }
+  return __real_fsync(fd);
+}
+static void swap_destination() {
+  if (swap_path.empty())
+    return;
+  if (::rename(swap_path.c_str(), swap_aside.c_str()) == 0 &&
+      ::symlink(swap_target.c_str(), swap_path.c_str()) == 0)
+    swap_path.clear();
+}
+extern "C" int __real_chmod(const char *path, mode_t mode);
+extern "C" int __wrap_chmod(const char *path, mode_t mode) {
+  swap_destination();
+  return __real_chmod(path, mode);
+}
+extern "C" int __real_fchmod(int fd, mode_t mode);
+extern "C" int __wrap_fchmod(int fd, mode_t mode) {
+  swap_destination();
+  return __real_fchmod(fd, mode);
+}
+// The next close releases the descriptor and then reports EIO, as Linux does.
+static bool fail_next_close = false;
+extern "C" int __real_close(int fd);
+extern "C" int __wrap_close(int fd) {
+  const int result = __real_close(fd);
+  if (!fail_next_close)
+    return result;
+  fail_next_close = false;
+  errno = EIO;
+  return -1;
+}
 #endif
 
 namespace fs = std::filesystem;
@@ -265,12 +308,132 @@ static void test_links_permissions_and_failed_publication() {
   TEST_ASSERT_EQUAL(HAL_OK, jb_file_read(path.c_str(), 3, &bytes));
   TEST_ASSERT_EQUAL_MEMORY("old", bytes.data, 3);
   jb_file_release(&bytes);
+  // Windows ignores a requested mode: identical contents stay unchanged.
+  changed = true;
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    jb_file_write_atomic_mode(path.c_str(), "old", 3, false, 0644, &changed));
+  TEST_ASSERT_FALSE(changed);
 #else
   TEST_ASSERT_EQUAL(0, ::chmod(destination.c_str(), 0640));
   TEST_ASSERT_EQUAL(HAL_OK, jb_file_write_atomic(path.c_str(), "new", 3, false, &changed));
   struct stat info;
   TEST_ASSERT_EQUAL(0, ::stat(destination.c_str(), &info));
   TEST_ASSERT_EQUAL(0640, info.st_mode & 0777);
+  // A requested mode is exact whatever the umask, replaces kept bits and is
+  // restored on identical contents by a chmod that keeps the mtime.
+  const std::string moded = (root / "moded.json").u8string();
+  const mode_t previous_mask = ::umask(077);
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    jb_file_write_atomic_mode(moded.c_str(), "a", 1, false, 0644, &changed));
+  ::umask(previous_mask);
+  TEST_ASSERT_TRUE(changed);
+  TEST_ASSERT_EQUAL(0, ::stat(moded.c_str(), &info));
+  TEST_ASSERT_EQUAL(0644, info.st_mode & 07777);
+  TEST_ASSERT_EQUAL(0, ::chmod(moded.c_str(), 04755));
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    jb_file_write_atomic_mode(moded.c_str(), "b", 1, false, 0644, &changed));
+  TEST_ASSERT_EQUAL(0, ::stat(moded.c_str(), &info));
+  TEST_ASSERT_EQUAL(0644, info.st_mode & 07777);
+  TEST_ASSERT_EQUAL(0, ::chmod(moded.c_str(), 0600));
+  const auto moded_time = fs::file_time_type::clock::now() - std::chrono::hours(24);
+  fs::last_write_time(fs::u8path(moded), moded_time);
+  changed = false;
+  TEST_ASSERT_EQUAL(HAL_OK, jb_file_write_atomic_mode(moded.c_str(), "b", 1, true, 0644, &changed));
+  TEST_ASSERT_TRUE(changed);
+  TEST_ASSERT_EQUAL(0, ::stat(moded.c_str(), &info));
+  TEST_ASSERT_EQUAL(0600, info.st_mode & 07777);
+  changed = false;
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    jb_file_write_atomic_mode(moded.c_str(), "b", 1, false, 0644, &changed));
+  TEST_ASSERT_TRUE(changed);
+  TEST_ASSERT_EQUAL(0, ::stat(moded.c_str(), &info));
+  TEST_ASSERT_EQUAL(0644, info.st_mode & 07777);
+  TEST_ASSERT_TRUE(fs::last_write_time(fs::u8path(moded)) == moded_time);
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    jb_file_write_atomic_mode(moded.c_str(), "b", 1, false, 0644, &changed));
+  TEST_ASSERT_FALSE(changed);
+  changed = false;
+  TEST_ASSERT_EQUAL(HAL_EINVAL,
+                    jb_file_write_atomic_mode(moded.c_str(), "c", 1, false, 01000, &changed));
+  TEST_ASSERT_FALSE(changed);
+  // A link put at the path right before the mode change leaves its target
+  // alone: the compared file gets the bits, then one fsync makes them durable.
+  const std::string victim = (root / "victim.json").u8string();
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    jb_file_write_atomic_mode(victim.c_str(), "v", 1, false, 0600, &changed));
+  TEST_ASSERT_EQUAL(0, ::chmod(moded.c_str(), 0600));
+  swap_aside = (root / "moded.aside").u8string();
+  swap_target = victim;
+  swap_path = moded;
+  fsync_calls = 0;
+  changed = false;
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    jb_file_write_atomic_mode(moded.c_str(), "b", 1, false, 0644, &changed));
+  TEST_ASSERT_TRUE(swap_path.empty());
+  TEST_ASSERT_TRUE(changed);
+  TEST_ASSERT_EQUAL(0, ::stat(victim.c_str(), &info));
+  TEST_ASSERT_EQUAL(0600, info.st_mode & 07777);
+  TEST_ASSERT_EQUAL(0, ::stat(swap_aside.c_str(), &info));
+  TEST_ASSERT_EQUAL(0644, info.st_mode & 07777);
+  TEST_ASSERT_EQUAL(1u, fsync_calls);
+  TEST_ASSERT_EQUAL(0, ::unlink(moded.c_str()));
+  TEST_ASSERT_EQUAL(0, ::rename(swap_aside.c_str(), moded.c_str()));
+  // A failed fsync after the mode change reports changed=true with the error.
+  TEST_ASSERT_EQUAL(0, ::chmod(moded.c_str(), 0600));
+  fail_fsync = true;
+  changed = false;
+  const hal_status_t unsynced =
+      jb_file_write_atomic_mode(moded.c_str(), "b", 1, false, 0644, &changed);
+  fail_fsync = false;
+  TEST_ASSERT_EQUAL(HAL_EIO, unsynced);
+  TEST_ASSERT_TRUE(changed);
+  TEST_ASSERT_EQUAL(0, ::stat(moded.c_str(), &info));
+  TEST_ASSERT_EQUAL(0644, info.st_mode & 07777);
+  // A failed close of the compared file comes before the result and before a
+  // replacement, which then does not happen; after a mode change it keeps
+  // changed=true.
+  fail_next_close = true;
+  changed = true;
+  TEST_ASSERT_EQUAL(HAL_EIO, jb_file_write_atomic(moded.c_str(), "b", 1, false, &changed));
+  TEST_ASSERT_TRUE(changed);
+  fail_next_close = true;
+  changed = false;
+  TEST_ASSERT_EQUAL(HAL_EIO, jb_file_write_atomic(moded.c_str(), "x", 1, false, &changed));
+  TEST_ASSERT_FALSE(changed);
+  jb_file_data_t kept{};
+  TEST_ASSERT_EQUAL(HAL_OK, jb_file_read(moded.c_str(), 1, &kept));
+  TEST_ASSERT_EQUAL_MEMORY("b", kept.data, 1);
+  jb_file_release(&kept);
+  TEST_ASSERT_EQUAL(0, ::chmod(moded.c_str(), 0600));
+  fail_next_close = true;
+  changed = false;
+  TEST_ASSERT_EQUAL(HAL_EIO,
+                    jb_file_write_atomic_mode(moded.c_str(), "b", 1, false, 0644, &changed));
+  TEST_ASSERT_TRUE(changed);
+  TEST_ASSERT_EQUAL(0, ::stat(moded.c_str(), &info));
+  TEST_ASSERT_EQUAL(0644, info.st_mode & 07777);
+  TEST_ASSERT_FALSE(fail_next_close);
+#ifdef __linux__
+  // A file reporting size 0 despite its bytes is compared up to end of file.
+  const char *const hostname = "/proc/sys/kernel/hostname";
+  jb_file_data_t name{};
+  TEST_ASSERT_EQUAL(HAL_OK, jb_file_read(hostname, 4096, &name));
+  TEST_ASSERT_TRUE(name.length > 0);
+  TEST_ASSERT_EQUAL(0, ::stat(hostname, &info));
+  TEST_ASSERT_EQUAL(0, info.st_size);
+  changed = true;
+  TEST_ASSERT_EQUAL(HAL_OK, jb_file_write_atomic(hostname, name.data, name.length, true, &changed));
+  TEST_ASSERT_FALSE(changed);
+  changed = true;
+  TEST_ASSERT_EQUAL(HAL_OK, jb_file_write_atomic_mode(hostname, name.data, name.length, true,
+                                                      info.st_mode & 0777, &changed));
+  TEST_ASSERT_FALSE(changed);
+  changed = false;
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    jb_file_write_atomic(hostname, name.data, name.length - 1, true, &changed));
+  TEST_ASSERT_TRUE(changed);
+  jb_file_release(&name);
+#endif
   const fs::path link = root / "link.json";
   fs::create_symlink(destination.filename(), link);
   const std::string link_path = link.u8string();

@@ -203,18 +203,26 @@ void flush_and_close(temporary_file &temp) {
     io_error();
 }
 
-void create_replacement(const fs::path &destination, temporary_file &temp) {
+/* A sibling temporary file for destination with the rwx bits of an existing
+ * destination, or exactly *mode when the caller requests permission bits. */
+void create_replacement(const fs::path &destination, temporary_file &temp,
+                        const uint32_t *mode = nullptr) {
   const fs::path parent = destination.has_parent_path() ? destination.parent_path() : fs::path(".");
   fs::create_directories(parent);
   create_temporary(destination, temp);
 #ifndef _WIN32
   struct stat info;
-  if (::stat(destination.c_str(), &info) == 0) {
+  if (mode != nullptr) {
+    if (::fchmod(temp.file.value, static_cast<mode_t>(*mode)) != 0)
+      io_error();
+  } else if (::stat(destination.c_str(), &info) == 0) {
     if (::fchmod(temp.file.value, info.st_mode & 0777) != 0)
       io_error();
   } else if (errno != ENOENT) {
     io_error();
   }
+#else
+  (void)mode;
 #endif
 }
 
@@ -256,20 +264,49 @@ bool regular_destination(const fs::path &path) {
   return true;
 }
 
-bool same_file(const fs::path &path, const void *data, size_t length) {
+/* Whether path is a regular file holding exactly data. file keeps the
+ * descriptor or handle of the compared file (POSIX opens it without following
+ * a final link), so a later change reaches that file even if the path names
+ * another one by then. A reported size above length settles a difference, as
+ * the limit of jb_file_read did; a smaller one, such as the 0 of a /proc
+ * file, does not, so the bytes up to end of file decide. */
+bool same_file(const fs::path &path, const void *data, size_t length, native_file &file) {
   if (!regular_destination(path))
     return false;
-  jb_file_data_t previous{};
-  const std::string text = path.u8string();
-  const hal_status_t status = jb_file_read(text.c_str(), length, &previous);
-  if (status == HAL_EOVERFLOW)
+#ifdef _WIN32
+  const uint64_t size = open_read(path, file);
+#else
+  file.value = ::open(path.c_str(), O_RDONLY | O_CLOEXEC | O_NONBLOCK | O_NOFOLLOW);
+  if (file.value == -1) {
+    // Gone since the check counts as missing; a link put there is rejected.
+    if (errno == ENOENT || errno == ENOTDIR)
+      return false;
+    if (errno == ELOOP)
+      throw failure{HAL_ETYPE};
+    io_error();
+  }
+  struct stat info;
+  if (::fstat(file.value, &info) != 0)
+    io_error();
+  if (!S_ISREG(info.st_mode))
+    throw failure{HAL_ETYPE};
+  if (info.st_size < 0)
+    throw failure{HAL_EIO};
+  const uint64_t size = static_cast<uint64_t>(info.st_size);
+#endif
+  if (size > length)
     return false;
-  if (status != HAL_OK)
-    throw failure{status};
-  const bool equal =
-      previous.length == length && (length == 0 || std::memcmp(previous.data, data, length) == 0);
-  jb_file_release(&previous);
-  return equal;
+  const auto *bytes = static_cast<const unsigned char *>(data);
+  unsigned char chunk[4096];
+  size_t at = 0;
+  for (;;) {
+    const size_t count = read_chunk(file, chunk, sizeof(chunk));
+    if (count == 0)
+      return at == length;
+    if (count > length - at || std::memcmp(chunk, bytes + at, count) != 0)
+      return false;
+    at += count;
+  }
 }
 fs::path absolute_path(const char *path) {
   auto result = path_from(path);
@@ -398,26 +435,66 @@ extern "C" void jb_file_release(jb_file_data_t *data) {
   }
 }
 
-extern "C" hal_status_t jb_file_write_atomic(const char *path, const void *data, size_t length,
-                                             bool check_only, bool *changed) {
+namespace {
+/* Compare, then publish data at path; mode, when given, is the requested
+ * POSIX permission bits of the result (ignored on Windows). */
+hal_status_t write_atomic(const char *path, const void *data, size_t length, bool check_only,
+                          const uint32_t *mode, bool *changed) {
   if (changed == nullptr || (data == nullptr && length != 0))
     return HAL_EINVAL;
   return boundary([&] {
     const fs::path destination = path_from(path);
-    if (same_file(destination, data, length)) {
-      *changed = false;
-      return;
+    native_file compared;
+    const bool same = same_file(destination, data, length, compared);
+#ifndef _WIN32
+    if (same && mode != nullptr) {
+      // Through the compared descriptor: the path may name another file now.
+      struct stat info;
+      if (::fstat(compared.value, &info) != 0)
+        io_error();
+      if ((info.st_mode & 07777) != *mode) {
+        if (!check_only) {
+          if (::fchmod(compared.value, static_cast<mode_t>(*mode)) != 0)
+            io_error();
+          // The new bits are visible: a later error keeps changed=true.
+          *changed = true;
+          if (::fsync(compared.value) != 0)
+            io_error();
+        }
+        if (!compared.close())
+          io_error();
+        *changed = true;
+        return;
+      }
     }
-    if (check_only) {
-      *changed = true;
+#endif
+    // A failed close comes before any result or replacement, and a read
+    // handle must not hold the destination while it is replaced.
+    if (!compared.close())
+      io_error();
+    if (same || check_only) {
+      *changed = !same;
       return;
     }
     temporary_file temp;
-    create_replacement(destination, temp);
+    create_replacement(destination, temp, mode);
     write_bytes(temp.file, data, length);
     flush_and_close(temp);
     publish_temporary(temp, destination, changed);
   });
+}
+} // namespace
+
+extern "C" hal_status_t jb_file_write_atomic(const char *path, const void *data, size_t length,
+                                             bool check_only, bool *changed) {
+  return write_atomic(path, data, length, check_only, nullptr, changed);
+}
+
+extern "C" hal_status_t jb_file_write_atomic_mode(const char *path, const void *data, size_t length,
+                                                  bool check_only, uint32_t mode, bool *changed) {
+  if (mode > 0777)
+    return HAL_EINVAL;
+  return write_atomic(path, data, length, check_only, &mode, changed);
 }
 
 struct jb_file_writer {

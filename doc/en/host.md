@@ -51,6 +51,19 @@ preserves its rwx permission bits. Final symlinks, reparse points and
 nonregular destinations are rejected. Parent directories follow existing
 links, so this API does not confine untrusted paths to a directory.
 
+`jb_file_write_atomic_mode(path, data, length, check_only, mode, changed)`
+publishes the same way and also sets the POSIX permission bits of the result
+to `mode` (at most `0777`). A written file gets exactly `mode`, whatever the
+umask. If the contents are identical but the permission bits differ,
+including setuid, setgid and sticky bits, the call changes only the mode,
+keeps the mtime and reports `changed=true`; check mode reports it without
+touching the file. The mode change goes through the descriptor of the
+compared file, opened without following a final link, so a path replaced in
+the meantime never passes it to another file, and the call then fsyncs that
+descriptor. If this fsync or the close after it fails, the error comes back
+with `changed=true`: the new bits are visible but may not survive a crash.
+Windows ignores `mode`, so identical contents stay unchanged there.
+
 Calls do not lock external editors. With concurrent writers, the last
 successful replacement wins. Errors preserve `changed`, except a POSIX
 directory flush failure after replacement: `changed=true` then means the new

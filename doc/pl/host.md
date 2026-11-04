@@ -52,6 +52,19 @@ jego bity rwx. Końcowy symlink, reparse point lub cel innego rodzaju jest
 odrzucany. Katalogi nadrzędne mogą prowadzić przez istniejące linki, więc API
 nie ogranicza niezaufanych ścieżek do jednego katalogu.
 
+`jb_file_write_atomic_mode(path, data, length, check_only, mode, changed)`
+zapisuje tak samo, a dodatkowo ustawia bity uprawnień POSIX wyniku na `mode`
+(najwyżej `0777`). Zapisany plik dostaje dokładnie `mode`, niezależnie od
+umask. Przy identycznej treści i innych bitach uprawnień, także setuid, setgid
+i sticky, funkcja zmienia tylko tryb, zachowuje mtime i zgłasza
+`changed=true`; tryb sprawdzania zgłasza to bez zmiany pliku. Tryb zmienia
+przez deskryptor porównanego pliku, otwartego bez podążania za końcowym
+linkiem, więc ścieżka podmieniona w międzyczasie nie przenosi zmiany na inny
+plik, a potem wykonuje fsync tego deskryptora. Gdy ten fsync albo późniejsze
+zamknięcie się nie uda, błąd wraca z `changed=true`: nowe bity są widoczne,
+ale mogą nie przetrwać awarii. Windows pomija `mode`, więc identyczna treść
+zostaje tam bez zmian.
+
 Wywołania nie blokują zewnętrznych edytorów. Przy równoległych zapisach
 obowiązuje ostatnia udana podmiana. Błędy zachowują `changed`, poza błędem
 flush katalogu POSIX już po podmianie: `changed=true` oznacza wtedy, że nowe

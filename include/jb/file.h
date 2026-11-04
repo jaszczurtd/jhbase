@@ -61,6 +61,22 @@ void jb_file_release(jb_file_data_t *data);
 hal_status_t jb_file_write_atomic(const char *path, const void *data, size_t length,
                                   bool check_only, bool *changed);
 
+/** jb_file_write_atomic that also sets the POSIX permission bits of the result.
+ * @param mode Permission bits, at most 0777; a larger value gives HAL_EINVAL.
+ * A written file gets exactly mode, whatever the umask. Identical contents
+ * with other permission bits (setuid, setgid and sticky included) keep their
+ * mtime and report changed=true; the call changes the mode of the compared
+ * file through its descriptor, opened without following a final link, and
+ * fsyncs that descriptor, so a path replaced meanwhile never passes the
+ * change to another file. A failed fsync or close after the change returns
+ * its error with changed=true: the new bits are visible but may not survive a
+ * crash. check_only reports a difference without changing anything. Windows
+ * ignores mode, so identical contents stay unchanged there. The remaining
+ * rules and errors match jb_file_write_atomic.
+ */
+hal_status_t jb_file_write_atomic_mode(const char *path, const void *data, size_t length,
+                                       bool check_only, uint32_t mode, bool *changed);
+
 /** Single-owner opaque streaming writer. Release with commit or abort. */
 typedef struct jb_file_writer jb_file_writer_t;
 /** OS-owned exclusive lock. Do not unlink or replace its lock file. */
