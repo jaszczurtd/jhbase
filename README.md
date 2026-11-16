@@ -42,10 +42,12 @@ Optional Unicode normalization and character properties use
 JSON Pointer locates values and writes node paths through
 [json_pointer.h](include/jb/json_pointer.h).
 Host files, processes and owned JSON configuration trees use `JHBASE_HOST=ON`
-and `jb::host`; see [host operations](doc/en/host.md).
+and `jb::host`; see [host operations](doc/en/host.md). ZIP and tar.gz
+extraction adds `JHBASE_ARCHIVE=ON` and `jb::archive`; see
+[archive extraction](doc/en/archive.md).
 JSON Schema remains outside this prototype.
 The public ABI may still change; integrations should use a reviewed commit pin.
 The [dependencies guide](doc/en/dependencies.md) covers preparation, tool pins,
-Ryu, utf8proc and their licenses.
+Ryu, utf8proc, libarchive, zlib and their licenses.
 
 License: [JaszczurHAL Attribution License (MIT-based)](LICENSE).

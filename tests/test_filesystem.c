@@ -5,6 +5,7 @@
 #include "jb/array.h"
 #include "jb/file.h"
 #include "jb/filesystem.h"
+#include "test_heap.h"
 #include "unity.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,37 +28,6 @@ static char test_root[8192];
 static char paths[8][8192];
 static char output[8192];
 static char cwd_before[8192];
-static size_t fail_allocation, live_allocations;
-
-static void *test_allocate(void *context, size_t bytes) {
-  (void)context;
-  if (fail_allocation != 0 && --fail_allocation == 0)
-    return NULL;
-  void *data = malloc(bytes);
-  if (data != NULL)
-    ++live_allocations;
-  return data;
-}
-
-static void test_release(void *context, void *data) {
-  (void)context;
-  if (live_allocations == 0)
-    abort();
-  --live_allocations;
-  free(data);
-}
-
-/* Replace the separate archive member for allocation-failure coverage. */
-const jb_allocator_t *jb_heap_allocator(void) {
-  static const jb_allocator_t allocator = {NULL, test_allocate, test_release};
-  return &allocator;
-}
-
-void setUp(void) { fail_allocation = 0; }
-void tearDown(void) {
-  fail_allocation = 0;
-  TEST_ASSERT_EQUAL_size_t(0, live_allocations);
-}
 
 static const char *test_path(size_t slot, const char *relative) {
   size_t required = 0;

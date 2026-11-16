@@ -5,6 +5,7 @@
 #endif
 
 #include "jb/filesystem.h"
+#include "filesystem_internal.h"
 #include "jb/file.h"
 #include "jb/string.h"
 #include "jb/utf8.h"
@@ -495,6 +496,10 @@ static hal_status_t fs_utf8(const wchar_t *wide, char **out) {
   return HAL_OK;
 }
 
+hal_status_t jb_fs_native_status(uint32_t code) { return fs_error((DWORD)code); }
+
+hal_status_t jb_fs_native_path(const char *path, wchar_t **out) { return fs_wide(path, out); }
+
 static jb_fs_info_t fs_windows_info(DWORD attributes, DWORD high, DWORD low, bool links) {
   jb_fs_info_t info = {0};
   if (links && (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
@@ -589,6 +594,8 @@ static hal_status_t fs_error(int code) {
     return HAL_EIO;
   }
 }
+
+hal_status_t jb_fs_native_status(uint32_t code) { return fs_error((int)code); }
 
 static jb_fs_info_t fs_posix_info(const struct stat *metadata) {
   jb_fs_info_t info = {0};

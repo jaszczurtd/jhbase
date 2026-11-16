@@ -102,6 +102,7 @@ check_staged_tree() {
         cmake "-DJB_SOURCE=$staged_tree" -P tests/check_source.cmake &&
         cmake -P cmake/ryu_verify.cmake &&
         cmake -P cmake/utf8proc_pin.cmake &&
+        cmake -P cmake/archive_pin.cmake &&
         cmake -P cmake/unicode_test_pin.cmake &&
         for script in .githooks/commit-msg .githooks/pre-commit; do
             sh -n "$script" || return 1

@@ -26,7 +26,8 @@ zestaw oczekiwanych wyników liczbowych z checkoutu HAL, domyślnie
 `cmake --install` zapisuje nagłówki, bibliotekę statyczną i pakiet CMake:
 `find_package(jhbase)` udostępnia `jb::base` i `jb::status`. Z `JHBASE_HOST=ON`
 eksportuje też target C `jb::filesystem` i `jb::host`; zobacz
-[operacje systemu plików](filesystem.md). Pakiet zapisuje
+[operacje systemu plików](filesystem.md). `JHBASE_ARCHIVE=ON` dokłada
+`jb::archive`, opisany niżej. Pakiet zapisuje
 rewizję biblioteki w `jhbase_REVISION` i układ publicznych nagłówków
 w `jhbase_ABI_PROFILE`, na przykład `natural-ptr32-status32-bool8`. Rewizja
 pochodzi z `JHBASE_REVISION`, a bez niej z git HEAD tego checkoutu, z dopiskiem
@@ -76,6 +77,38 @@ normalizacja nadal wymaga tabel Unicode we flashu; brak heap nie usuwa tego
 kosztu. Domyślny build pomija moduł. Pełna instalacja z włączonym Unicode
 eksportuje `jb::unicode` i dostarcza jego licencję. Zasady pamięci scratch
 i limitów pracy opisuje [API](api.md#unicode).
+
+## Opcjonalne rozpakowywanie archiwów
+
+`JHBASE_ARCHIVE=ON` buduje [`jb::archive`](archive.md) i wymaga
+`JHBASE_HOST=ON`. Moduł linkuje niezmienione checkouty libarchive 3.8.11
+i zlib 1.4, ignorowane przez Git. Ich piny,
+[libarchive](../../third_party/libarchive_version.conf) i
+[zlib](../../third_party/zlib_version.conf), zapisują repozytorium i pełny
+commit. Przygotuj je jawnie przez `./scripts/ensure_tools.sh libarchive zlib`,
+które uruchamia `scripts/ensure_libarchive.cmake` i `scripts/ensure_zlib.cmake`;
+`-DJB_VERIFY_ONLY=ON` przekazane tym skryptom sprawdza checkouty bez pobierania.
+Tak jak przy utf8proc, configure i każdy build modułu sprawdzają rewizję,
+origin, czysty stan i bajty źródeł obu checkoutów.
+
+Oba projekty budują się własnymi plikami CMake, dołączanymi z funkcji, która
+wyłącza wszystko, czego moduł nie używa: programy libarchive, testy, instalację,
+biblioteki kryptograficzne i XML, iconv, ACL i atrybuty rozszerzone oraz kodeki
+xz, zstd, bzip2, lz4 i lzo. Moduł rejestruje tylko czytniki TAR i ZIP oraz
+filtr gzip, więc żaden zewnętrzny program dekompresujący nie startuje. Te opcje
+zostają w zasięgu funkcji. Cache projektu nadrzędnego dostaje opcje, które
+zlib i libarchive deklarują same, oraz `ZLIB_INCLUDE_DIR` wskazujące
+przypięte zlib; inna, wcześniej ustawiona wartość zatrzymuje configure.
+Generator jednokonfiguracyjny wymaga `CMAKE_BUILD_TYPE`, bo libarchive wpisałoby
+inaczej Release do cache całego buildu.
+
+Pełna instalacja eksportuje `jb::archive` razem z `jb::libarchive`
+i `jb::zlib`. Ich pliki nazywają się `jb_libarchive` i `jb_zlib`, więc we
+wspólnym prefiksie nie zastąpią bibliotek systemowych, a pakiet zawiera obie
+licencje w `share/jhbase/licenses`. libarchive używa licencji BSD w wersji
+dwuklauzulowej; część plików ma trzyklauzulową notę UC Regents, status
+domeny publicznej albo wybór CC0, OpenSSL i Apache 2.0, co wymienia jego
+[COPYING](https://github.com/libarchive/libarchive/blob/03036ffa409a2aa1c5bbad35be2202641a040fda/COPYING). zlib używa [licencji zlib](https://github.com/madler/zlib/blob/99623ef7097352da7993ba614161fd6a311e046e/LICENSE).
 
 ## Buforowy zapis Ryu
 

@@ -77,19 +77,20 @@ loads the Visual Studio developer-shell module itself.
 ## Run the tests
 
 Prepare the bundle on Linux from the reviewed source snapshot. It needs the
-HAL checkout selected by `JHBASE_HAL_ROOT` (default `../JaszczurHAL`) and three
-dependencies: Unity, utf8proc, and the Unicode normalization corpus with its
-license. Prepare those dependencies explicitly, then package them:
+HAL checkout selected by `JHBASE_HAL_ROOT` (default `../JaszczurHAL`) and five
+dependencies: Unity, utf8proc, libarchive, zlib, and the Unicode normalization
+corpus with its license. Prepare those dependencies explicitly, then package them:
 
 ```sh
-./scripts/ensure_tools.sh unity utf8proc unicode-test
+./scripts/ensure_tools.sh unity utf8proc unicode-test libarchive zlib
 ./scripts/package_windows.sh
 ```
 
 The result is `.build/windows-transfer/jhbase-windows-source.tar.gz`.
 It contains jhbase sources, the HAL numeric fixture and license, Unity under
-`tools`, and a SHA-256 manifest. The ignored utf8proc checkout, including its
-Git metadata, and the Unicode corpus and license are included explicitly.
+`tools`, and a SHA-256 manifest. The ignored utf8proc, libarchive and zlib
+checkouts, including their Git metadata, and the Unicode corpus and license are
+included explicitly.
 Other ignored files, build caches and local access keys are excluded.
 The packaging script verifies dependencies without downloading them.
 
@@ -104,7 +105,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\runalltests.ps1 -HalRoot C
 ```
 
 The runner builds and runs CTest with Unicode disabled and enabled on x64 and
-Win32. Every configuration includes `jb::host`. `-Architecture x64` selects
+Win32. Every configuration includes `jb::host` and `jb::archive`. The archive
+test covers symbolic links only with Developer Mode or the symbolic link
+privilege; otherwise it checks the refusal and prints which path ran.
+`-Architecture x64` selects
 only x64, retaining both Unicode settings. Each build directory contains its
 JUnit report, `ctest.xml`:
 

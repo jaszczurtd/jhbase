@@ -44,10 +44,12 @@ JSON Pointer wyszukuje wartości i zapisuje ścieżki węzłów przez
 [json_pointer.h](include/jb/json_pointer.h).
 Pliki, procesy i własne drzewa konfiguracji JSON na hoście włącza
 `JHBASE_HOST=ON` i target `jb::host`; zobacz [operacje hosta](doc/pl/host.md).
+Rozpakowywanie ZIP i tar.gz dokłada `JHBASE_ARCHIVE=ON` i `jb::archive`; zobacz
+[rozpakowywanie archiwów](doc/pl/archive.md).
 JSON Schema pozostaje poza obecnym zakresem.
 Publiczne ABI nadal może się zmieniać; integracje powinny używać
 pinu sprawdzonego commita.
 [Opis zależności](doc/pl/dependencies.md) wyjaśnia ich przygotowanie, piny narzędzi
-oraz wykorzystanie Ryu, utf8proc i ich licencje.
+oraz wykorzystanie Ryu, utf8proc, libarchive, zlib i ich licencje.
 
 Licencja: [JaszczurHAL Attribution License (MIT-based)](LICENSE).

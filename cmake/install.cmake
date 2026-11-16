@@ -82,4 +82,17 @@ if(JHBASE_INSTALL_LIBRARY)
             DESTINATION "${CMAKE_INSTALL_DATADIR}/jhbase/licenses/utf8proc"
             COMPONENT jhbase_library)
   endif()
+  if(JHBASE_ARCHIVE)
+    # The static archive links the libarchive and zlib libraries built here.
+    install(TARGETS jb_archive archive_static zlibstatic EXPORT jhbaseArchiveTargets
+            ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}" COMPONENT jhbase_library)
+    install(EXPORT jhbaseArchiveTargets NAMESPACE jb:: DESTINATION "${jb_cmake_dir}"
+            COMPONENT jhbase_library)
+    install(FILES "${jb_libarchive_source}/COPYING"
+            DESTINATION "${CMAKE_INSTALL_DATADIR}/jhbase/licenses/libarchive"
+            COMPONENT jhbase_library)
+    install(FILES "${jb_zlib_source}/LICENSE"
+            DESTINATION "${CMAKE_INSTALL_DATADIR}/jhbase/licenses/zlib"
+            COMPONENT jhbase_library)
+  endif()
 endif()

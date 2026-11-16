@@ -1,6 +1,10 @@
 .build/
 /third_party/utf8proc/
 /third_party/utf8proc.staging/
+/third_party/libarchive/
+/third_party/libarchive.staging/
+/third_party/zlib/
+/third_party/zlib.staging/
 /tests/fixtures/unicode/
 /tests/fixtures/unicode.staging/
 NOW.md

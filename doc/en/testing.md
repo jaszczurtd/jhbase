@@ -59,8 +59,8 @@ Linux gate:
 ```
 
 Both preparation scripts download only pinned, verified content. Tools and
-comparison sources go below `.build`; utf8proc and Unicode conformance data
-use their ignored source and fixture directories. The gate itself downloads
+comparison sources go below `.build`; utf8proc, libarchive, zlib and Unicode
+conformance data use their ignored source and fixture directories. The gate itself downloads
 nothing and stops with the repair command when a dependency is missing or
 modified. See [dependencies](dependencies.md) and [parser selection](parser-choice.md).
 The `comparison` stage accepts `JHBASE_COMPARISON_ROOT` for an explicit cache.
@@ -131,6 +131,27 @@ holds the output pipes and attempts a delayed write: termination must prevent
 that write, including after normal main-process exit. Linux also checks signal
 termination and launching with closed standard descriptors. These cases run
 through the existing host, sanitizer, memcheck and Windows configurations.
+
+## Archive tests
+
+With `JHBASE_ARCHIVE=ON`, `test_archive` writes its fixtures with the libarchive
+writer, including entries a regular archiver would not produce. It extracts a
+tar.gz and a ZIP tree with UTF-8 names, both separators, execute bits, links,
+link chains and hard links, and checks exclusions. Rejected input covers entry
+names and link targets that leave the destination, writes through a link,
+repeated names, every limit, a ZIP header that understates its size, damaged
+data, wrong formats and compression, names that are not UTF-8, unsupported
+entry types and invalid arguments. Cancellation stops at every poll, and
+injected allocation failures must release all memory. Linux also checks a
+failed write through `--wrap=write`; Windows checks device names, data
+streams and names that differ only in case.
+
+On Windows the test first probes whether symbolic links can be created. Without
+Developer Mode or the privilege it checks the `HAL_EPERM` path instead and
+prints which one ran. The host, sanitizer, memcheck and clean stages build the
+module; `./scripts/ensure_tools.sh` prepares libarchive and zlib with the other
+dependencies. The installed-package check links a C and a C++ consumer with
+`jb::archive` and compares the installed licenses with the pinned checkouts.
 
 ## Commit checks
 

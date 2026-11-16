@@ -52,8 +52,9 @@ Przygotuj raz źródła porównania, a potem uruchom pełną bramkę Linuksa:
 ```
 
 Oba skrypty przygotowania pobierają wyłącznie przypiętą, zweryfikowaną
-zawartość. Narzędzia i źródła porównania trafiają do `.build`, a utf8proc
-i dane zgodności Unicode do swoich ignorowanych katalogów źródeł i fixture.
+zawartość. Narzędzia i źródła porównania trafiają do `.build`, a utf8proc,
+libarchive, zlib i dane zgodności Unicode do swoich ignorowanych katalogów
+źródeł i fixture.
 Sama bramka niczego nie pobiera; brak lub zmiana zależności kończą się
 poleceniem naprawy. Zobacz [zależności](dependencies.md)
 i [wybór parsera](parser-choice.md).
@@ -133,6 +134,28 @@ utrzymuje otwarte potoki i próbuje opóźnionego zapisu: zakończenie musi
 uniemożliwić zapis, także po normalnym wyjściu procesu głównego. Linux sprawdza
 też zakończenie sygnałem i uruchamianie z zamkniętymi standardowymi deskryptorami.
 Scenariusze należą do istniejących konfiguracji hosta, sanitizerów, memcheck i Windows.
+
+## Testy archiwów
+
+Z `JHBASE_ARCHIVE=ON` program `test_archive` tworzy swoje archiwa writerem
+libarchive, także z wpisami, których zwykły program archiwizujący nie zapisze.
+Rozpakowuje drzewo tar.gz i ZIP z nazwami UTF-8, oboma separatorami, bitami
+wykonywania, dowiązaniami, ich łańcuchami i twardymi dowiązaniami oraz sprawdza
+wykluczenia. Odrzucane wejście obejmuje nazwy wpisów i cele dowiązań wychodzące
+poza katalog, zapis przez dowiązanie, powtórzone nazwy, każdy limit, nagłówek
+ZIP z zaniżonym rozmiarem, uszkodzone dane, zły format i kompresję, nazwy spoza
+UTF-8, nieobsługiwane rodzaje wpisów i błędne argumenty. Anulowanie zatrzymuje
+się przy każdym odpytaniu, a wymuszone błędy alokacji muszą zwolnić całą pamięć.
+Linux sprawdza też nieudany zapis przez `--wrap=write`; Windows nazwy urządzeń,
+strumienie danych i nazwy różniące się tylko wielkością liter.
+
+Na Windows test najpierw sprawdza, czy może tworzyć dowiązania symboliczne.
+Bez trybu dewelopera albo uprawnienia sprawdza ścieżkę `HAL_EPERM` i wypisuje,
+która wersja się wykonała. Etapy host, sanitizery, memcheck i clean budują
+moduł; `./scripts/ensure_tools.sh` przygotowuje libarchive i zlib razem
+z pozostałymi zależnościami. Kontrola zainstalowanego pakietu linkuje aplikację
+C i C++ z `jb::archive` i porównuje zainstalowane licencje z przypiętymi
+checkoutami.
 
 ## Kontrole commitów
 

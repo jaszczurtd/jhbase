@@ -77,18 +77,19 @@ w PATH zwykłego terminala: runner sam ładuje moduł developer shell Visual Stu
 
 Przygotuj paczkę na Linuksie ze sprawdzanej migawki źródeł. Potrzebuje ona
 checkoutu HAL wskazanego przez `JHBASE_HAL_ROOT` (domyślnie `../JaszczurHAL`)
-oraz trzech zależności: Unity, utf8proc i zestawu danych do testów normalizacji
-Unicode wraz z licencją. Najpierw przygotuj te zależności, a potem je spakuj:
+oraz pięciu zależności: Unity, utf8proc, libarchive, zlib i zestawu danych do
+testów normalizacji Unicode wraz z licencją. Najpierw przygotuj te zależności,
+a potem je spakuj:
 
 ```sh
-./scripts/ensure_tools.sh unity utf8proc unicode-test
+./scripts/ensure_tools.sh unity utf8proc unicode-test libarchive zlib
 ./scripts/package_windows.sh
 ```
 
 Wynikiem jest `.build/windows-transfer/jhbase-windows-source.tar.gz`.
 Archiwum zawiera źródła jhbase, fixture liczb i licencję HAL, Unity w katalogu
-`tools` oraz manifest SHA-256. Ignorowany checkout utf8proc z metadanymi Git,
-dane Unicode i ich licencja są dołączane jawnie. Pozostałe pliki ignorowane,
+`tools` oraz manifest SHA-256. Ignorowane checkouty utf8proc, libarchive i zlib
+z metadanymi Git, dane Unicode i ich licencja są dołączane jawnie. Pozostałe pliki ignorowane,
 cache buildów i lokalne klucze dostępu są pomijane. Skrypt pakujący sprawdza
 zależności, ale ich nie pobiera.
 
@@ -103,7 +104,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\runalltests.ps1 -HalRoot C
 ```
 
 Runner buduje i uruchamia CTest z Unicode wyłączonym i włączonym na x64
-oraz Win32. Każda konfiguracja zawiera `jb::host`. `-Architecture x64`
+oraz Win32. Każda konfiguracja zawiera `jb::host` i `jb::archive`. Test archiwów
+obejmuje dowiązania symboliczne tylko w trybie dewelopera albo z uprawnieniem
+do dowiązań; bez nich sprawdza odmowę i wypisuje, która ścieżka się wykonała.
+`-Architecture x64`
 wybiera samo x64, zachowując oba ustawienia Unicode. Każdy katalog buildu
 zawiera raport JUnit `ctest.xml`:
 
