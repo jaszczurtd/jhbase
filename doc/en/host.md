@@ -144,6 +144,9 @@ absolute destination path, creating missing parents. Initialize the opaque owner
 to NULL. `jb_file_writer_write` appends exact bytes with bounded memory; the
 limit covers their total length and zero permits only an empty file. A failed
 append poisons the writer, so a later commit cannot publish incomplete output.
+`jb_file_writer_size` reports the bytes appended so far, including those a
+failed append stored before its error; the limit check refuses an append
+before any of its bytes are written.
 
 `jb_file_writer_commit` flushes the file, compares both files in chunks and
 preserves destination mtime when their contents match. Otherwise it uses the

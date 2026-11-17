@@ -83,6 +83,24 @@ to the lead-byte offset of the first invalid or incomplete sequence.
 `HAL_EINVAL` rejects `NULL` input with nonzero length and leaves the offset
 unchanged.
 
+### `jb_utf8_copy_valid_prefix`
+
+```c
+hal_status_t jb_utf8_copy_valid_prefix(const char *input, size_t length, char *buffer,
+                                       size_t capacity, size_t *copied);
+```
+
+Copies the longest leading part of input that is valid UTF-8 and fits into
+`capacity - 1` bytes, then a terminating NUL. The copy stops before the first
+invalid or incomplete sequence and never splits a scalar, so the result is
+always valid UTF-8. Embedded NUL is copied like any other scalar. Use it for
+diagnostic text that may be shortened or come from another library.
+
+A shortened copy still returns `HAL_OK`; `copied`, when given, receives the
+number of bytes before the terminator. `HAL_EINVAL` rejects `NULL` input with
+nonzero length, a missing buffer or zero capacity and leaves both outputs
+unchanged.
+
 **Example: validate text and re-encode its first scalar**
 
 For the bytes E2 82 AC followed by A, the result is the three-byte euro sign.

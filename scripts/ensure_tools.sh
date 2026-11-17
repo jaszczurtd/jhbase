@@ -20,13 +20,13 @@ while (($#)); do
     -j[0-9]*) jb_jobs="${1#-j}"; shift ;;
     --help)
       printf '%s\n' 'Usage: scripts/ensure_tools.sh [--check] [--tools-root PATH] [-j N]' \
-        '       [unity|cppcheck|pmd|riscv-toolchain|xtensa-toolchain|cmake-minimum|utf8proc|unicode-test|libarchive|zlib ...]   (default: all)'
+        '       [unity|cppcheck|pmd|riscv-toolchain|xtensa-toolchain|cmake-minimum|utf8proc|unicode-test|libarchive|zlib|curl ...]   (default: all)'
       exit 0 ;;
     -*) printf 'Unknown argument: %s\n' "$1" >&2; exit 2 ;;
     *) jb_selected+=("$1"); shift ;;
   esac
 done
-((${#jb_selected[@]})) || jb_selected=(unity cppcheck pmd riscv-toolchain xtensa-toolchain cmake-minimum utf8proc unicode-test libarchive zlib)
+((${#jb_selected[@]})) || jb_selected=(unity cppcheck pmd riscv-toolchain xtensa-toolchain cmake-minimum utf8proc unicode-test libarchive zlib curl)
 mkdir -p "$jb_tools"
 jb_tools="$(cd "$jb_tools" && pwd -P)"
 jb_stamp=.jhbase-component
@@ -203,7 +203,7 @@ for jb_name in "${jb_selected[@]}"; do
     riscv-toolchain) ensure_riscv ;;
     xtensa-toolchain) ensure_xtensa ;;
     cmake-minimum) ensure_cmake_minimum ;;
-    utf8proc | unicode-test | libarchive | zlib)
+    utf8proc | unicode-test | libarchive | zlib | curl)
       jb_dependency_args=()
       ((jb_check == 0)) || jb_dependency_args+=(-DJB_VERIFY_ONLY=ON)
       cmake "${jb_dependency_args[@]}" -P "${jb_root}/scripts/ensure_${jb_name//-/_}.cmake" ;;

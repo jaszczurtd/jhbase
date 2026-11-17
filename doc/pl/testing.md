@@ -53,7 +53,7 @@ Przygotuj raz źródła porównania, a potem uruchom pełną bramkę Linuksa:
 
 Oba skrypty przygotowania pobierają wyłącznie przypiętą, zweryfikowaną
 zawartość. Narzędzia i źródła porównania trafiają do `.build`, a utf8proc,
-libarchive, zlib i dane zgodności Unicode do swoich ignorowanych katalogów
+libarchive, zlib, curl i dane zgodności Unicode do swoich ignorowanych katalogów
 źródeł i fixture.
 Sama bramka niczego nie pobiera; brak lub zmiana zależności kończą się
 poleceniem naprawy. Zobacz [zależności](dependencies.md)
@@ -156,6 +156,51 @@ moduł; `./scripts/ensure_tools.sh` przygotowuje libarchive i zlib razem
 z pozostałymi zależnościami. Kontrola zainstalowanego pakietu linkuje aplikację
 C i C++ z `jb::archive` i porównuje zainstalowane licencje z przypiętymi
 checkoutami.
+
+## Testy pobierania
+
+Z `JHBASE_DOWNLOAD=ON` program `test_download` uruchamia lokalne serwery HTTPS
+i nie potrzebuje publicznej sieci. Serwerami TLS są procesy
+`openssl s_server -HTTP`, więc strona serwera nie dzieli kodu z libcurl ani
+z jego backendem TLS. Narzędzie openssl tworzy też przy każdym uruchomieniu
+testowe CA, certyfikaty serwerów i listy CRL. Configure znajduje je przez
+`find_program`: pakiet `openssl` na Linuksie, Git for Windows na Windows
+(`usr/bin` albo `mingw64/bin` instalacji) albo ścieżkę z
+`JHBASE_OPENSSL_EXECUTABLE`. Między klientem a serwerem stoją wątki testu:
+jeden zamyka, wstrzymuje, przecina strumień TLS albo zatrzymuje go po części
+treści, drugi odpowiada na `CONNECT` jako proxy, a trzeci udostępnia listy
+CRL, które pobiera Schannel.
+
+Zaufane pobranie trafia do celu, z plikiem CA, w ścieżkach ze spacjami i
+znakami spoza ASCII; każdy przypadek sprawdza też, że nie został żaden plik
+tymczasowy. Odrzucane przypadki to niezaufane CA, zła nazwa hosta, magazyn
+systemowy, inny plik CA, brakujący plik CA, przekierowanie do zwykłego HTTP
+(serwer HTTP nie może dostać żądania), inne schematy URL i proxy, błędne URL,
+404, 403, 304, zbyt wiele przekierowań i oba limity rozmiaru. Odpowiedź 503,
+ucięta treść i przecięty strumień TLS muszą się udać w kolejnej próbie,
+`Retry-After` musi ją opóźnić, a timeout musi ograniczać wszystkie próby
+razem, także gdy późniejsza próba zatrzyma się w trakcie treści. Anulowanie
+kończy żądanie przed pierwszą próbą, zatrzymany handshake TLS, zatrzymany
+transfer i oczekiwanie przed kolejną próbą. Test obejmuje też jawne proxy,
+zmienne środowiskowe proxy, które bez niego nie mogą działać, proxy wymagające
+danych Basic (407 bez nich), proxy oferujące tylko Digest (407 na każdej
+platformie), proxy odpowiadające 502, proxy bez schematu z nazwą hosta
+zaczynającą się od `ftp.` oraz dwa równoległe pobrania. Anulowanie, które
+przyjdzie z ostatnim fragmentem, zachowuje poprzedni plik, a zerowy limit
+rozmiaru odrzuca zapowiedziany bajt, który nigdy nie dociera. Na Linuksie
+dochodzą nieudany, częściowy i zablokowany zapis przez `--wrap=write`
+(zablokowany nie może zatrzymać wywołania dłużej niż do anulowania albo
+terminu), nieudana publikacja przez `--wrap=fsync`, wyszukiwanie nazwy
+wolniejsze niż limity przez `--wrap=getaddrinfo` oraz kontrola, że `SIGPIPE`
+nie dociera do procesu, także zgłoszony w wątku roboczym w trakcie transferu.
+Na Windows dochodzą serwer CRL, który nigdy nie odpowiada i nie może zatrzymać
+wywołania dłużej niż do anulowania albo limitu połączenia, oraz unieważniony
+certyfikat serwera, który Schannel musi odrzucić po pobraniu listy CRL.
+
+Etapy host, sanitizery, memcheck i clean budują moduł; memcheck uruchamia test
+pod Valgrindem bez śledzenia procesów openssl. Kontrola zainstalowanego pakietu
+linkuje aplikację C i C++ z `jb::download` i porównuje zainstalowaną licencję
+curl z przypiętym checkoutem.
 
 ## Kontrole commitów
 

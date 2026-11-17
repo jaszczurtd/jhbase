@@ -47,7 +47,7 @@ if [[ -n "$JB_COMMIT" ]]; then
     cp -a "${JB_ROOT}/third_party/utf8proc/." "${JB_CHECKOUT}/third_party/utf8proc/"
     cmake -DJB_VERIFY_ONLY=ON -P "${JB_CHECKOUT}/scripts/ensure_utf8proc.cmake"
   fi
-  for jb_dependency in libarchive zlib; do
+  for jb_dependency in libarchive zlib curl; do
     if [[ -f "${JB_CHECKOUT}/third_party/${jb_dependency}_version.conf" && -d "${JB_ROOT}/third_party/${jb_dependency}/.git" ]]; then
       mkdir -p "${JB_CHECKOUT}/third_party/${jb_dependency}"
       cp -a "${JB_ROOT}/third_party/${jb_dependency}/." "${JB_CHECKOUT}/third_party/${jb_dependency}/"
@@ -80,10 +80,10 @@ fi
 jb_tools_needed=()
 for jb_name in "${JB_STAGES[@]}"; do
   case "$jb_name" in
-    host | sanitizers | memcheck) jb_stage_tools=(unity utf8proc unicode-test libarchive zlib) ;;
-    clean) jb_stage_tools=(unity cmake-minimum utf8proc unicode-test libarchive zlib) ;;
+    host | sanitizers | memcheck) jb_stage_tools=(unity utf8proc unicode-test libarchive zlib curl) ;;
+    clean) jb_stage_tools=(unity cmake-minimum utf8proc unicode-test libarchive zlib curl) ;;
     freestanding) jb_stage_tools=(riscv-toolchain xtensa-toolchain utf8proc) ;;
-    analysis) jb_stage_tools=(cppcheck utf8proc libarchive) ;;
+    analysis) jb_stage_tools=(cppcheck utf8proc libarchive curl) ;;
     fuzz) jb_stage_tools=(utf8proc) ;;
     quality) jb_stage_tools=(pmd) ;;
     *) continue ;;
@@ -112,7 +112,7 @@ configure() {
   cmake -S "$JB_ROOT" -B "$jb_dir" -G Ninja \
     "-DJHBASE_HAL_ROOT=${JB_HAL}" "-DJHBASE_UNITY_ROOT=${JB_UNITY}" -DCMAKE_BUILD_TYPE=Release \
     -DBUILD_TESTING=ON -DJHBASE_LTO=OFF -DJHBASE_SANITIZERS=OFF -DJHBASE_UNICODE=OFF -DJHBASE_HOST=ON \
-    -DJHBASE_ARCHIVE=ON \
+    -DJHBASE_ARCHIVE=ON -DJHBASE_DOWNLOAD=ON \
     -DJHBASE_FUZZ=OFF -DJHBASE_COMPARE=OFF \
     -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \
     -DCMAKE_C_FLAGS= -DCMAKE_CXX_FLAGS= "$@"
@@ -153,6 +153,10 @@ memcheck() {
     --errors-for-leak-kinds=all "${JB_GATE}/memcheck/test_filesystem" "${JB_GATE}/memcheck/filesystem-files"
   valgrind --error-exitcode=99 --leak-check=full --show-leak-kinds=all \
     --errors-for-leak-kinds=all "${JB_GATE}/memcheck/test_archive" "${JB_GATE}/memcheck/archive-files"
+  # The openssl s_server children are not traced; the test process is.
+  valgrind --error-exitcode=99 --leak-check=full --show-leak-kinds=all \
+    --errors-for-leak-kinds=all "${JB_GATE}/memcheck/test_download" "${JB_GATE}/memcheck/download-files" \
+    "$(command -v openssl)"
   valgrind --error-exitcode=99 --leak-check=full --show-leak-kinds=all \
     --errors-for-leak-kinds=all "${JB_GATE}/memcheck/test_literals" \
     "${JB_HAL}/tests/fixtures/device_tree/cases.json"
@@ -160,7 +164,7 @@ memcheck() {
 
 fuzz() {
   configure "${JB_GATE}/fuzz" -DBUILD_TESTING=OFF -DJHBASE_FUZZ=ON -DJHBASE_UNICODE=ON -DJHBASE_HOST=OFF \
-    -DJHBASE_ARCHIVE=OFF \
+    -DJHBASE_ARCHIVE=OFF -DJHBASE_DOWNLOAD=OFF \
     -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18
   for jb_fuzzer in json numbers writer; do
     mkdir -p "${JB_GATE}/fuzz/${jb_fuzzer}/corpus" "${JB_GATE}/fuzz/${jb_fuzzer}/artifacts"
@@ -206,7 +210,7 @@ freestanding() {
 comparison() {
   local jb_reference="${JHBASE_COMPARISON_ROOT:-${JB_ROOT}/.build/comparison}"
   configure "${JB_GATE}/comparison" -DBUILD_TESTING=OFF -DJHBASE_COMPARE=ON -DJHBASE_HOST=OFF \
-    -DJHBASE_ARCHIVE=OFF \
+    -DJHBASE_ARCHIVE=OFF -DJHBASE_DOWNLOAD=OFF \
     -DJHBASE_SANITIZERS=ON -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18 \
     "-DJHBASE_COREJSON_ROOT=${jb_reference}/coreJSON" "-DJHBASE_YYJSON_ROOT=${jb_reference}/yyjson"
   ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
@@ -232,7 +236,7 @@ clean() {
   "${jb_cmake}/cmake" -S "$jb_copy" -B "${jb_copy}/.build/host" -G Ninja \
     "-DJHBASE_HAL_ROOT=${JB_HAL}" "-DJHBASE_UNITY_ROOT=${JB_UNITY}" \
     -DCMAKE_BUILD_TYPE=Release -DJHBASE_LTO=ON -DJHBASE_UNICODE=ON -DJHBASE_HOST=ON \
-    -DJHBASE_ARCHIVE=ON -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \
+    -DJHBASE_ARCHIVE=ON -DJHBASE_DOWNLOAD=ON -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \
     -DCMAKE_C_FLAGS= -DCMAKE_CXX_FLAGS=
   "${jb_cmake}/cmake" --build "${jb_copy}/.build/host" -j "$JB_JOBS"
   "${jb_cmake}/ctest" --test-dir "${jb_copy}/.build/host" --output-on-failure \
@@ -242,12 +246,14 @@ clean() {
 }
 
 analysis() {
+  # Inline suppressions name one finding at its line with the reason beside it.
   "${JB_TOOLS}/cppcheck/bin/cppcheck" \
-    --enable=warning,style,performance,portability --error-exitcode=1 \
+    --enable=warning,style,performance,portability --error-exitcode=1 --inline-suppr \
     --std=c11 --language=c \
     "-I${JB_ROOT}/include" "-I${JB_ROOT}/third_party/ryu" \
     "-I${JB_ROOT}/third_party/utf8proc" -DUTF8PROC_STATIC \
     "-I${JB_ROOT}/third_party/libarchive/libarchive" -DLIBARCHIVE_STATIC \
+    "-I${JB_ROOT}/third_party/curl/include" -DCURL_STATICLIB \
     "${JB_ROOT}"/src/*.c "${JB_ROOT}"/src/host/*.c
   "${JB_TOOLS}/cppcheck/bin/cppcheck" \
     --enable=warning,style,performance,portability --error-exitcode=1 \

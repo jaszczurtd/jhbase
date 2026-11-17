@@ -43,6 +43,21 @@ hal_status_t jb_utf8_encode(uint32_t scalar, char *buffer, size_t capacity, size
  */
 hal_status_t jb_utf8_validate(const char *input, size_t length, size_t *error_offset);
 
+/** Copy the longest leading part of input that is valid UTF-8 and fits, then a
+ * terminating NUL. Copying stops before the first invalid or incomplete
+ * sequence and never splits a scalar; embedded NUL is copied like any scalar.
+ * Suits diagnostic text that may be shortened or come from another library.
+ * @param input Bytes; NULL is allowed only when length is zero.
+ * @param length Number of input bytes.
+ * @param buffer Required destination of capacity bytes.
+ * @param capacity Destination size including the terminator; at least 1.
+ * @param copied Optional result: bytes copied before the terminator.
+ * @return HAL_OK, also for a shortened copy, or HAL_EINVAL for invalid
+ * arguments, which leave buffer and copied unchanged.
+ */
+hal_status_t jb_utf8_copy_valid_prefix(const char *input, size_t length, char *buffer,
+                                       size_t capacity, size_t *copied);
+
 #ifdef __cplusplus
 }
 #endif

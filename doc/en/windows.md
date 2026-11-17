@@ -21,6 +21,7 @@ and a writable working directory such as `C:\src`.
    copy with Ninja when present, otherwise with NMake from the Developer
    PowerShell (see [VS Code](vscode.md)).
 3. Install [Git for Windows](https://gitforwindows.org/) with command-line access.
+   Its `openssl.exe` runs the local HTTPS servers of the download test.
 4. Finish pending installer restarts and open a new terminal.
 
 Python, WSL, embedded SDKs and firmware toolchains are not required for the
@@ -77,18 +78,18 @@ loads the Visual Studio developer-shell module itself.
 ## Run the tests
 
 Prepare the bundle on Linux from the reviewed source snapshot. It needs the
-HAL checkout selected by `JHBASE_HAL_ROOT` (default `../JaszczurHAL`) and five
-dependencies: Unity, utf8proc, libarchive, zlib, and the Unicode normalization
+HAL checkout selected by `JHBASE_HAL_ROOT` (default `../JaszczurHAL`) and six
+dependencies: Unity, utf8proc, libarchive, zlib, curl, and the Unicode normalization
 corpus with its license. Prepare those dependencies explicitly, then package them:
 
 ```sh
-./scripts/ensure_tools.sh unity utf8proc unicode-test libarchive zlib
+./scripts/ensure_tools.sh unity utf8proc unicode-test libarchive zlib curl
 ./scripts/package_windows.sh
 ```
 
 The result is `.build/windows-transfer/jhbase-windows-source.tar.gz`.
 It contains jhbase sources, the HAL numeric fixture and license, Unity under
-`tools`, and a SHA-256 manifest. The ignored utf8proc, libarchive and zlib
+`tools`, and a SHA-256 manifest. The ignored utf8proc, libarchive, zlib and curl
 checkouts, including their Git metadata, and the Unicode corpus and license are
 included explicitly.
 Other ignored files, build caches and local access keys are excluded.
@@ -105,7 +106,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\runalltests.ps1 -HalRoot C
 ```
 
 The runner builds and runs CTest with Unicode disabled and enabled on x64 and
-Win32. Every configuration includes `jb::host` and `jb::archive`. The archive
+Win32. Every configuration includes `jb::host`, `jb::archive` and
+`jb::download`. The download test finds `openssl.exe` of Git for Windows and
+needs no public network. The archive
 test covers symbolic links only with Developer Mode or the symbolic link
 privilege; otherwise it checks the refusal and prints which path ran.
 `-Architecture x64` selects

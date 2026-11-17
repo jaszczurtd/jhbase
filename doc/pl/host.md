@@ -147,6 +147,9 @@ wskazanego bezwzględną ścieżką i tworzy brakujące katalogi nadrzędne. Wyz
 wskaźnik właściciela. `jb_file_writer_write` dopisuje dokładne bajty przy
 ograniczonym zużyciu pamięci; limit obejmuje ich łączną liczbę, a zero pozwala
 tylko na pusty plik. Błąd dopisania blokuje późniejszą publikację niepełnego wyniku.
+`jb_file_writer_size` podaje liczbę dotąd dopisanych bajtów, także tych, które
+nieudane dopisanie zdążyło zapisać przed błędem; kontrola limitu odrzuca
+dopisanie, zanim którykolwiek jego bajt trafi do pliku.
 
 `jb_file_writer_commit` opróżnia plik, porównuje oba pliki porcjami i zachowuje
 mtime celu przy identycznej zawartości. W przeciwnym razie korzysta z tych samych

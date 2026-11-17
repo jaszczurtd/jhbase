@@ -168,7 +168,8 @@ void create_temporary(const fs::path &destination, temporary_file &temp) {
 #endif
 }
 
-void write_bytes(native_file &file, const void *data, size_t length) {
+/* stored, when given, counts every byte the OS accepted, also before a failure. */
+void write_bytes(native_file &file, const void *data, size_t length, uint64_t *stored = nullptr) {
   const auto *bytes = static_cast<const unsigned char *>(data);
   size_t at = 0;
   while (at < length) {
@@ -188,6 +189,8 @@ void write_bytes(native_file &file, const void *data, size_t length) {
     if (count == 0)
       throw failure{HAL_EIO};
     at += static_cast<size_t>(count);
+    if (stored != nullptr)
+      *stored += static_cast<uint64_t>(count);
   }
 }
 
@@ -538,12 +541,18 @@ extern "C" hal_status_t jb_file_writer_write(jb_file_writer_t *writer, const voi
       throw failure{HAL_EINVAL};
     if (length > writer->limit - writer->written)
       throw failure{HAL_EOVERFLOW};
-    write_bytes(writer->temp.file, data, length);
-    writer->written += length;
+    write_bytes(writer->temp.file, data, length, &writer->written);
   });
   if (status != HAL_OK)
     writer->failed = true;
   return status;
+}
+
+extern "C" hal_status_t jb_file_writer_size(const jb_file_writer_t *writer, uint64_t *bytes) {
+  if (writer == nullptr || bytes == nullptr)
+    return HAL_EINVAL;
+  *bytes = writer->written;
+  return HAL_OK;
 }
 
 extern "C" hal_status_t jb_file_writer_commit(jb_file_writer_t **writer, bool *changed) {

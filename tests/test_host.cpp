@@ -740,8 +740,12 @@ static int process_child(int argc, char **argv) {
       return 98;
     unsigned char bytes[1024]{};
     const auto status = jb_file_writer_write(writer, bytes, sizeof(bytes));
+    /* The OS stores 512 bytes before the limit refuses the rest. */
+    uint64_t stored = 0;
+    const bool counted = jb_file_writer_size(writer, &stored) == HAL_OK && stored == 512u;
     bool changed = false;
-    return status == HAL_EIO && jb_file_writer_commit(&writer, &changed) == HAL_ESTATE && !changed
+    return status == HAL_EIO && counted && jb_file_writer_commit(&writer, &changed) == HAL_ESTATE &&
+                   !changed
                ? 0
                : 99;
   }
@@ -1150,14 +1154,25 @@ static void test_streaming_commit_abort_limits_and_unchanged_mtime() {
   jb_file_writer_t *writer = nullptr;
   TEST_ASSERT_EQUAL(HAL_OK, jb_file_writer_begin(path.c_str(), sizeof(bytes), &writer));
   TEST_ASSERT_EQUAL(HAL_ESTATE, jb_file_writer_begin(path.c_str(), 0, &writer));
+  uint64_t stored = 99;
+  TEST_ASSERT_EQUAL(HAL_OK, jb_file_writer_size(writer, &stored));
+  TEST_ASSERT_EQUAL_UINT64(0u, stored);
   TEST_ASSERT_EQUAL(HAL_OK, jb_file_writer_write(writer, bytes, 2));
   TEST_ASSERT_EQUAL(HAL_OK, jb_file_writer_write(writer, bytes + 2, sizeof(bytes) - 2));
+  TEST_ASSERT_EQUAL(HAL_OK, jb_file_writer_size(writer, &stored));
+  TEST_ASSERT_EQUAL_UINT64(sizeof(bytes), stored);
+  TEST_ASSERT_EQUAL(HAL_EINVAL, jb_file_writer_size(writer, nullptr));
+  TEST_ASSERT_EQUAL(HAL_EINVAL, jb_file_writer_size(nullptr, &stored));
   TEST_ASSERT_EQUAL(HAL_OK, jb_file_writer_commit(&writer, &changed));
   TEST_ASSERT_NULL(writer);
   TEST_ASSERT_FALSE(changed);
   TEST_ASSERT_TRUE(before == fs::last_write_time(fs::u8path(path)));
   TEST_ASSERT_EQUAL(HAL_OK, jb_file_writer_begin(path.c_str(), 4, &writer));
+  TEST_ASSERT_EQUAL(HAL_OK, jb_file_writer_write(writer, bytes, 1));
+  /* The limit refuses an append before any of its bytes reach the file. */
   TEST_ASSERT_EQUAL(HAL_EOVERFLOW, jb_file_writer_write(writer, bytes, sizeof(bytes)));
+  TEST_ASSERT_EQUAL(HAL_OK, jb_file_writer_size(writer, &stored));
+  TEST_ASSERT_EQUAL_UINT64(1u, stored);
   TEST_ASSERT_EQUAL(HAL_ESTATE, jb_file_writer_write(writer, bytes, 1));
   TEST_ASSERT_EQUAL(HAL_ESTATE, jb_file_writer_commit(&writer, &changed));
   TEST_ASSERT_FALSE(changed);

@@ -97,3 +97,30 @@ hal_status_t jb_utf8_validate(const char *input, size_t length, size_t *error_of
   }
   return HAL_OK;
 }
+
+hal_status_t jb_utf8_copy_valid_prefix(const char *input, size_t length, char *buffer,
+                                       size_t capacity, size_t *copied) {
+  if ((input == NULL && length != 0) || buffer == NULL || capacity == 0) {
+    return HAL_EINVAL;
+  }
+  size_t valid = length;
+  size_t invalid = 0;
+  if (jb_utf8_validate(input, length, &invalid) != HAL_OK) {
+    valid = invalid;
+  }
+  if (valid >= capacity) {
+    /* Back off to the lead byte of the scalar that no longer fits. */
+    valid = capacity - 1u;
+    while (valid > 0u && ((unsigned char)input[valid] & 0xC0u) == 0x80u) {
+      --valid;
+    }
+  }
+  for (size_t index = 0; index < valid; ++index) {
+    buffer[index] = input[index];
+  }
+  buffer[valid] = '\0';
+  if (copied != NULL) {
+    *copied = valid;
+  }
+  return HAL_OK;
+}

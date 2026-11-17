@@ -145,8 +145,14 @@ function(jb_ensure_git_dependency label directory repository revision script)
   endif()
   file(REMOVE_RECURSE "${staging}")
   find_program(jb_git NAMES git REQUIRED)
+  execute_process(COMMAND "${jb_git}" init -q "${staging}" RESULT_VARIABLE rc)
+  if(NOT rc EQUAL 0)
+    message(FATAL_ERROR "git preparation failed: init ${staging}")
+  endif()
+  # Upstream .gitattributes may request CRLF or filters (curl's *.bat, *.sln);
+  # info/attributes takes precedence, so files keep the bytes of their blobs.
+  file(WRITE "${staging}/.git/info/attributes" "* -text -eol -filter -ident -working-tree-encoding\n")
   foreach(arguments IN ITEMS
-      "init;-q;${staging}"
       "-C;${staging};config;core.autocrlf;false"
       "-C;${staging};remote;add;origin;${repository}"
       "-C;${staging};fetch;-q;--depth;1;origin;${revision}"

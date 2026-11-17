@@ -44,10 +44,11 @@ JSON Pointer locates values and writes node paths through
 Host files, processes and owned JSON configuration trees use `JHBASE_HOST=ON`
 and `jb::host`; see [host operations](doc/en/host.md). ZIP and tar.gz
 extraction adds `JHBASE_ARCHIVE=ON` and `jb::archive`; see
-[archive extraction](doc/en/archive.md).
+[archive extraction](doc/en/archive.md). HTTPS downloads add
+`JHBASE_DOWNLOAD=ON` and `jb::download`; see [HTTPS downloads](doc/en/download.md).
 JSON Schema remains outside this prototype.
 The public ABI may still change; integrations should use a reviewed commit pin.
 The [dependencies guide](doc/en/dependencies.md) covers preparation, tool pins,
-Ryu, utf8proc, libarchive, zlib and their licenses.
+Ryu, utf8proc, libarchive, zlib, curl and their licenses.
 
 License: [JaszczurHAL Attribution License (MIT-based)](LICENSE).

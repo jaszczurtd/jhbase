@@ -105,6 +105,14 @@ hal_status_t jb_file_writer_begin(const char *path, uint64_t max_bytes, jb_file_
  */
 hal_status_t jb_file_writer_write(jb_file_writer_t *writer, const void *data, size_t length);
 
+/** Report the bytes appended so far, including those a failed append stored
+ * in the temporary file before its error.
+ * @param writer Required live owner, also one poisoned by a failed append.
+ * @param bytes Required result.
+ * @return HAL_OK or HAL_EINVAL for a NULL argument.
+ */
+hal_status_t jb_file_writer_size(const jb_file_writer_t *writer, uint64_t *bytes);
+
 /** Flush, compare and publish, consuming and nulling a valid owner on every outcome.
  * @param writer Required pointer to a live writer; NULL owner gives HAL_EINVAL.
  * @param changed Required result; unchanged on error except after a successful

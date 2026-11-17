@@ -103,6 +103,7 @@ check_staged_tree() {
         cmake -P cmake/ryu_verify.cmake &&
         cmake -P cmake/utf8proc_pin.cmake &&
         cmake -P cmake/archive_pin.cmake &&
+        cmake -P cmake/download_pin.cmake &&
         cmake -P cmake/unicode_test_pin.cmake &&
         for script in .githooks/commit-msg .githooks/pre-commit; do
             sh -n "$script" || return 1

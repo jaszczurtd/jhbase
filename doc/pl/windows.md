@@ -21,6 +21,7 @@ na czas instalacji i katalogiem roboczym z prawem zapisu, np. `C:\src`.
    tymczasową kopię przez Ninja, gdy jest dostępna, a inaczej przez NMake
    z Developer PowerShell (zobacz [VS Code](vscode.md)).
 3. Zainstaluj [Git for Windows](https://gitforwindows.org/) z dostępem z terminala.
+   Jego `openssl.exe` uruchamia lokalne serwery HTTPS testu pobierania.
 4. Wykonaj restarty wymagane przez instalatory i otwórz nowy terminal.
 
 Natywne testy biblioteki nie wymagają Pythona, WSL, SDK mikrokontrolerów ani
@@ -77,18 +78,18 @@ w PATH zwykłego terminala: runner sam ładuje moduł developer shell Visual Stu
 
 Przygotuj paczkę na Linuksie ze sprawdzanej migawki źródeł. Potrzebuje ona
 checkoutu HAL wskazanego przez `JHBASE_HAL_ROOT` (domyślnie `../JaszczurHAL`)
-oraz pięciu zależności: Unity, utf8proc, libarchive, zlib i zestawu danych do
+oraz sześciu zależności: Unity, utf8proc, libarchive, zlib, curl i zestawu danych do
 testów normalizacji Unicode wraz z licencją. Najpierw przygotuj te zależności,
 a potem je spakuj:
 
 ```sh
-./scripts/ensure_tools.sh unity utf8proc unicode-test libarchive zlib
+./scripts/ensure_tools.sh unity utf8proc unicode-test libarchive zlib curl
 ./scripts/package_windows.sh
 ```
 
 Wynikiem jest `.build/windows-transfer/jhbase-windows-source.tar.gz`.
 Archiwum zawiera źródła jhbase, fixture liczb i licencję HAL, Unity w katalogu
-`tools` oraz manifest SHA-256. Ignorowane checkouty utf8proc, libarchive i zlib
+`tools` oraz manifest SHA-256. Ignorowane checkouty utf8proc, libarchive, zlib i curl
 z metadanymi Git, dane Unicode i ich licencja są dołączane jawnie. Pozostałe pliki ignorowane,
 cache buildów i lokalne klucze dostępu są pomijane. Skrypt pakujący sprawdza
 zależności, ale ich nie pobiera.
@@ -104,7 +105,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\runalltests.ps1 -HalRoot C
 ```
 
 Runner buduje i uruchamia CTest z Unicode wyłączonym i włączonym na x64
-oraz Win32. Każda konfiguracja zawiera `jb::host` i `jb::archive`. Test archiwów
+oraz Win32. Każda konfiguracja zawiera `jb::host`, `jb::archive`
+i `jb::download`. Test pobierania znajduje `openssl.exe` z Git for Windows
+i nie potrzebuje publicznej sieci. Test archiwów
 obejmuje dowiązania symboliczne tylko w trybie dewelopera albo z uprawnieniem
 do dowiązań; bez nich sprawdza odmowę i wypisuje, która ścieżka się wykonała.
 `-Architecture x64`

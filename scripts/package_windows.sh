@@ -12,6 +12,7 @@ cmake -DJB_VERIFY_ONLY=ON -P "${jb_root}/scripts/ensure_utf8proc.cmake"
 cmake -DJB_VERIFY_ONLY=ON -P "${jb_root}/scripts/ensure_unicode_test.cmake"
 cmake -DJB_VERIFY_ONLY=ON -P "${jb_root}/scripts/ensure_libarchive.cmake"
 cmake -DJB_VERIFY_ONLY=ON -P "${jb_root}/scripts/ensure_zlib.cmake"
+cmake -DJB_VERIFY_ONLY=ON -P "${jb_root}/scripts/ensure_curl.cmake"
 mkdir -p "$jb_output"
 [[ ! -L "$jb_payload" ]] || { printf '%s\n' 'Payload directory must not be a symlink' >&2; exit 1; }
 cmake -E rm -rf "$jb_payload"
@@ -22,7 +23,7 @@ tar -C "$jb_root" --null --verbatim-files-from --no-recursion \
   -T "${jb_output}/sources.list" -cf - | tar -C "${jb_payload}/jhbase" -xf -
 # The ignored source checkout is a dependency of the test bundle, including
 # its independent Git metadata so native configure can verify the exact pin.
-for jb_dependency in utf8proc libarchive zlib; do
+for jb_dependency in utf8proc libarchive zlib curl; do
   cp -a "${jb_root}/third_party/${jb_dependency}" "${jb_payload}/jhbase/third_party/${jb_dependency}"
 done
 mkdir -p "${jb_payload}/jhbase/tests/fixtures"

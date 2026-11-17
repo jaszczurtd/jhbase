@@ -27,7 +27,8 @@ zestaw oczekiwanych wyników liczbowych z checkoutu HAL, domyślnie
 `find_package(jhbase)` udostępnia `jb::base` i `jb::status`. Z `JHBASE_HOST=ON`
 eksportuje też target C `jb::filesystem` i `jb::host`; zobacz
 [operacje systemu plików](filesystem.md). `JHBASE_ARCHIVE=ON` dokłada
-`jb::archive`, opisany niżej. Pakiet zapisuje
+`jb::archive`, a `JHBASE_DOWNLOAD=ON` dokłada `jb::download`; oba opisano niżej.
+Pakiet zapisuje
 rewizję biblioteki w `jhbase_REVISION` i układ publicznych nagłówków
 w `jhbase_ABI_PROFILE`, na przykład `natural-ptr32-status32-bool8`. Rewizja
 pochodzi z `JHBASE_REVISION`, a bez niej z git HEAD tego checkoutu, z dopiskiem
@@ -109,6 +110,40 @@ licencje w `share/jhbase/licenses`. libarchive używa licencji BSD w wersji
 dwuklauzulowej; część plików ma trzyklauzulową notę UC Regents, status
 domeny publicznej albo wybór CC0, OpenSSL i Apache 2.0, co wymienia jego
 [COPYING](https://github.com/libarchive/libarchive/blob/03036ffa409a2aa1c5bbad35be2202641a040fda/COPYING). zlib używa [licencji zlib](https://github.com/madler/zlib/blob/99623ef7097352da7993ba614161fd6a311e046e/LICENSE).
+
+## Opcjonalne pobieranie przez HTTPS
+
+`JHBASE_DOWNLOAD=ON` buduje [`jb::download`](download.md) i wymaga
+`JHBASE_HOST=ON`. Moduł linkuje niezmieniony checkout curl 8.23.0 ignorowany
+przez Git; jego [pin](../../third_party/curl_version.conf) zapisuje repozytorium
+i pełny commit taga wydania. Przygotuj go przez `./scripts/ensure_tools.sh curl`,
+które uruchamia `scripts/ensure_curl.cmake`; `-DJB_VERIFY_ONLY=ON` tylko
+sprawdza, bez pobierania. Configure i każdy build modułu sprawdzają rewizję,
+origin, czysty stan i bajty źródeł, tak jak dla pozostałych pinów. Każdy
+przygotowany checkout wyłącza konwersje z `.gitattributes` upstreamu, więc
+pliki, które curl oznacza do zapisu z CRLF, zachowują bajty przypiętego commita.
+
+curl buduje się przez własne pliki CMake jako biblioteka statyczna, dodana z
+funkcji, która wybiera backend TLS, zamiast go wykrywać: Schannel na Windows,
+systemowy OpenSSL na Linuksie. Przed configure zainstaluj pakiet deweloperski
+OpenSSL (`libssl-dev` w Debianie i Ubuntu) oraz `ca-certificates`. Funkcja
+włącza wątkowe rozwiązywanie nazw i IPv6. Wyłącza program curl, testy,
+przykłady, dokumentację, wszystkie protokoły poza HTTP i HTTPS, kompresję
+(zlib, brotli, zstd), HTTP/2 i HTTP/3, IDN, listy sufiksów publicznych, SSH,
+LDAP, cookies, pamięć podręczną HSTS i alt-svc, netrc oraz uwierzytelnianie
+Digest, Kerberos, NTLM i Negotiate; Basic zostaje dla danych logowania proxy.
+Configure przerywa pracę, gdy curl zgłasza inne protokoły, nie ma
+asynchronicznego DNS, TLS lub bezpiecznej wielowątkowo inicjalizacji albo
+włącza którąś z wyłączonych funkcji. Na Linuksie przerywa też, gdy curl nie
+znajdzie systemowego pakietu ani katalogu CA, a w przeciwnym razie wypisuje
+znaleziony magazyn.
+
+Pełna instalacja eksportuje `jb::download` razem z `jb::libcurl`, którego plik
+nazywa się `jb_libcurl`, i dołącza licencję curl w `share/jhbase/licenses/curl`.
+Na Linuksie konfiguracja pakietu ponownie wyszukuje OpenSSL i Threads, bo
+statyczne libcurl je linkuje. curl używa
+[licencji curl](https://github.com/curl/curl/blob/3163ec065643ba20709f190111f42c3e1fe95273/COPYING)
+w stylu MIT. Nowsze libcurl trafia do programu dopiero po ponownym linkowaniu.
 
 ## Buforowy zapis Ryu
 

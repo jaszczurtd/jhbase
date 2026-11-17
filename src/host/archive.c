@@ -110,19 +110,10 @@ static char *ja_duplicate(const char *text, size_t length) {
   return copy;
 }
 
-/* Copy valid UTF-8 up to the first invalid sequence, truncated at a
- * character boundary. */
-static void ja_copy(char *out, size_t capacity, const char *text) {
-  size_t length = strlen(text), invalid = 0;
-  if (jb_utf8_validate(text, length, &invalid) != HAL_OK)
-    length = invalid;
-  if (length >= capacity) {
-    length = capacity - 1u;
-    while (length > 0u && ((unsigned char)text[length] & 0xC0u) == 0x80u)
-      --length;
-  }
-  memcpy(out, text, length);
-  out[length] = '\0';
+/* Name the entry being processed: its valid UTF-8 prefix that fits. */
+static void ja_set_entry(ja_state_t *state, const char *text) {
+  (void)jb_utf8_copy_valid_prefix(text, strlen(text), state->result->entry,
+                                  sizeof(state->result->entry), NULL);
 }
 
 static hal_status_t ja_fail(ja_state_t *state, hal_status_t status, uint32_t native,
@@ -135,7 +126,8 @@ static hal_status_t ja_fail(ja_state_t *state, hal_status_t status, uint32_t nat
   if (written < 0)
     text[0] = '\0';
   state->result->native_error = native;
-  ja_copy(state->result->message, sizeof(state->result->message), text);
+  (void)jb_utf8_copy_valid_prefix(text, strlen(text), state->result->message,
+                                  sizeof(state->result->message), NULL);
   return status;
 }
 
@@ -665,7 +657,7 @@ static void ja_name_entry(ja_state_t *state, struct archive_entry *entry) {
   const char *name = archive_entry_pathname_utf8(entry);
   if (name == NULL)
     name = archive_entry_pathname(entry);
-  ja_copy(state->result->entry, sizeof(state->result->entry), name != NULL ? name : "");
+  ja_set_entry(state, name != NULL ? name : "");
 }
 
 static hal_status_t ja_entry(ja_state_t *state, struct archive_entry *entry) {
@@ -827,7 +819,7 @@ static hal_status_t ja_reaches_directory(ja_state_t *state, const ja_link_t *lin
 static hal_status_t ja_create_links(ja_state_t *state) {
   for (size_t index = 0; index < jb_vector_size(&state->links); ++index) {
     const ja_link_t *link = jb_vector_const_at(&state->links, index);
-    ja_copy(state->result->entry, sizeof(state->result->entry), link->path);
+    ja_set_entry(state, link->path);
     const hal_status_t status = ja_make_link(state, link, false);
     if (status != HAL_OK)
       return status;
@@ -835,7 +827,7 @@ static hal_status_t ja_create_links(ja_state_t *state) {
 #ifdef _WIN32
   for (size_t index = 0; index < jb_vector_size(&state->links); ++index) {
     const ja_link_t *link = jb_vector_const_at(&state->links, index);
-    ja_copy(state->result->entry, sizeof(state->result->entry), link->path);
+    ja_set_entry(state, link->path);
     bool directory = false;
     hal_status_t status = ja_reaches_directory(state, link, &directory);
     if (status == HAL_OK && directory)
@@ -1190,8 +1182,7 @@ static hal_status_t ja_run(ja_state_t *state, const char *archive, const char *d
   }
   for (size_t index = 0; index < state->exclusions; ++index) {
     if (!*(const bool *)jb_vector_const_at(&state->found, index)) {
-      ja_copy(state->result->entry, sizeof(state->result->entry),
-              state->options->exclusions[index]);
+      ja_set_entry(state, state->options->exclusions[index]);
       return ja_fail(state, HAL_ENOENT, 0u, "an exclusion matches no entry");
     }
   }

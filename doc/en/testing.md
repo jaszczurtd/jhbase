@@ -59,7 +59,7 @@ Linux gate:
 ```
 
 Both preparation scripts download only pinned, verified content. Tools and
-comparison sources go below `.build`; utf8proc, libarchive, zlib and Unicode
+comparison sources go below `.build`; utf8proc, libarchive, zlib, curl and Unicode
 conformance data use their ignored source and fixture directories. The gate itself downloads
 nothing and stops with the repair command when a dependency is missing or
 modified. See [dependencies](dependencies.md) and [parser selection](parser-choice.md).
@@ -152,6 +152,49 @@ prints which one ran. The host, sanitizer, memcheck and clean stages build the
 module; `./scripts/ensure_tools.sh` prepares libarchive and zlib with the other
 dependencies. The installed-package check links a C and a C++ consumer with
 `jb::archive` and compares the installed licenses with the pinned checkouts.
+
+## Download tests
+
+With `JHBASE_DOWNLOAD=ON`, `test_download` starts local HTTPS servers and needs
+no public network. The TLS servers are `openssl s_server -HTTP` processes, so
+the server side does not share code with libcurl or its TLS backend. The
+openssl tool also creates the test CAs, server certificates and CRLs for every
+run. Configure finds it with `find_program`: the `openssl` package on Linux,
+Git for Windows on Windows (`usr/bin` or `mingw64/bin` of the installation),
+or the path in `JHBASE_OPENSSL_EXECUTABLE`. Threads inside the test stand
+between client and server: one closes, stalls, cuts the TLS stream or holds it
+after part of the body, one answers `CONNECT` as a proxy, and one serves the
+CRLs that Schannel fetches.
+
+A trusted download goes into a destination, with a CA bundle, whose paths
+contain spaces and non-ASCII characters; every case also checks that no
+temporary file remains. The refused cases are an untrusted CA, a wrong host
+name, the system store, another CA bundle, a missing bundle, a redirect to
+plain HTTP (the plain server must see no request), other URL and proxy
+schemes, malformed URLs, 404, 403, 304, too many redirects and both size
+limits. A 503, a truncated body and a cut TLS stream must succeed on the next
+attempt, `Retry-After` must delay it, and a timeout must bound all attempts
+together, also when a later attempt stalls in the body. Cancellation ends a
+request before its first attempt, a TLS handshake that stalls, a held transfer
+and a retry delay. The test also covers an explicit proxy, proxy environment
+variables that must not apply without it, a proxy that demands Basic
+credentials (407 without them), a proxy offering only Digest (407 on every
+platform), a proxy answering 502, a proxy without a scheme whose host name
+starts with `ftp.`, and two concurrent downloads. Cancellation that arrives
+with the last fragment keeps the previous file, and a zero size limit refuses
+an announced byte that never arrives. Linux adds a failed, a partial and a
+blocked write through `--wrap=write` (the blocked one must not hold the call
+past cancellation or the deadline), a failed publish through `--wrap=fsync`, a
+DNS lookup slower than the limits through `--wrap=getaddrinfo`, and checks
+that no `SIGPIPE` reaches the process, also one raised on the worker thread
+during a transfer. Windows adds a CRL server that never answers, which must
+not hold the call past cancellation or the connection limit, and a revoked
+server certificate, which Schannel must refuse after fetching the CRL.
+
+The host, sanitizer, memcheck and clean stages build the module; memcheck runs
+the test under Valgrind without tracing the openssl processes. The
+installed-package check links a C and a C++ consumer with `jb::download` and
+compares the installed curl license with the pinned checkout.
 
 ## Commit checks
 

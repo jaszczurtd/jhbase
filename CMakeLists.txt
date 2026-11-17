@@ -32,6 +32,7 @@ option(JHBASE_UNICODE "Build optional Unicode normalization and character proper
 set(JHBASE_UTF8PROC_DIR "" CACHE PATH "Existing utf8proc checkout; empty uses third_party/utf8proc")
 option(JHBASE_HOST "Build Linux/Windows host operations (C++17 runtime)" OFF)
 option(JHBASE_ARCHIVE "Build ZIP and tar.gz extraction (jb::archive, pinned libarchive and zlib)" OFF)
+option(JHBASE_DOWNLOAD "Build HTTPS downloads (jb::download, pinned libcurl)" OFF)
 option(JHBASE_VSCODE_CHECK "Register the VS Code workspace check as a CTest test" ON)
 
 include(GNUInstallDirs)
@@ -114,6 +115,12 @@ if(JHBASE_ARCHIVE)
   endif()
   include(cmake/archive.cmake)
 endif()
+if(JHBASE_DOWNLOAD)
+  if(NOT JHBASE_HOST)
+    message(FATAL_ERROR "JHBASE_DOWNLOAD requires JHBASE_HOST")
+  endif()
+  include(cmake/download.cmake)
+endif()
 if(JHBASE_UNICODE)
   include(cmake/utf8proc_verify.cmake)
   add_custom_target(jb_verify_utf8proc
@@ -155,6 +162,9 @@ if(JHBASE_LTO)
   endif()
   if(JHBASE_ARCHIVE)
     set_property(TARGET jb_archive PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+  endif()
+  if(JHBASE_DOWNLOAD)
+    set_property(TARGET jb_download PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
   endif()
   if(JHBASE_UNICODE)
     set_property(TARGET jb_unicode jb_utf8proc PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
@@ -248,6 +258,33 @@ if(PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
     endif()
     add_test(NAME archive COMMAND test_archive "${CMAKE_CURRENT_BINARY_DIR}/archive-check")
     set_tests_properties(archive PROPERTIES TIMEOUT 120 LABELS "basic")
+  endif()
+  if(JHBASE_DOWNLOAD)
+    # Local HTTPS servers come from the openssl tool (Git for Windows ships one);
+    # the tests need no public network.
+    find_program(JHBASE_OPENSSL_EXECUTABLE openssl
+      HINTS "$ENV{ProgramFiles}/Git/usr/bin" "$ENV{ProgramFiles}/Git/mingw64/bin"
+      DOC "openssl tool for the local HTTPS servers of the download test")
+    if(NOT JHBASE_OPENSSL_EXECUTABLE)
+      message(FATAL_ERROR "The download test needs the openssl tool: the openssl package on "
+        "Linux, Git for Windows on Windows, or JHBASE_OPENSSL_EXECUTABLE")
+    endif()
+    add_executable(test_download tests/test_download.c tests/https_fixture.c)
+    target_link_libraries(test_download PRIVATE jb::download unity)
+    target_compile_definitions(test_download PRIVATE "JB_EXPECTED_CURL_VERSION=\"${CURL_VERSION}\"")
+    jb_warnings(test_download)
+    if(WIN32)
+      target_link_libraries(test_download PRIVATE ws2_32)
+    else()
+      target_link_libraries(test_download PRIVATE Threads::Threads)
+    endif()
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+      target_link_options(test_download PRIVATE -Wl,--wrap=write -Wl,--wrap=fsync
+        -Wl,--wrap=getaddrinfo)
+    endif()
+    add_test(NAME download COMMAND test_download "${CMAKE_CURRENT_BINARY_DIR}/download-check"
+      "${JHBASE_OPENSSL_EXECUTABLE}")
+    set_tests_properties(download PROPERTIES TIMEOUT 300 LABELS "basic")
   endif()
   include(cmake/api_examples.cmake)
   foreach(name utf8 json numbers writer literals containers map)
@@ -358,6 +395,7 @@ if(PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
       "-DJB_HOST=${JHBASE_HOST}"
       "-DJB_ARCHIVE=${JHBASE_ARCHIVE}"
       "-DJB_LIBARCHIVE=${jb_libarchive_source}" "-DJB_ZLIB=${jb_zlib_source}"
+      "-DJB_DOWNLOAD=${JHBASE_DOWNLOAD}" "-DJB_CURL=${jb_curl_source}"
       -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_install.cmake")
     set_tests_properties(install PROPERTIES TIMEOUT 300 LABELS "basic")
   endif()

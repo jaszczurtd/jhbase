@@ -89,6 +89,24 @@ a przy `HAL_EPROTO` `offset` bajtu rozpoczynającego pierwszą błędną
 lub niepełną sekwencję. `HAL_EINVAL` oznacza brak `input` przy niezerowej
 długości i pozostawia `error_offset` bez zmian.
 
+### `jb_utf8_copy_valid_prefix`
+
+```c
+hal_status_t jb_utf8_copy_valid_prefix(const char *input, size_t length, char *buffer,
+                                       size_t capacity, size_t *copied);
+```
+
+Kopiuje najdłuższy początkowy fragment wejścia, który jest poprawnym UTF-8
+i mieści się w `capacity - 1` bajtach, a za nim kończący NUL. Kopia kończy się
+przed pierwszą błędną lub niepełną sekwencją i nigdy nie dzieli znaku, więc
+wynik zawsze jest poprawnym UTF-8. Wewnętrzny NUL jest kopiowany jak każdy
+inny znak. Funkcja nadaje się do tekstu diagnostycznego, który może zostać
+skrócony albo pochodzi z innej biblioteki.
+
+Skrócona kopia też zwraca `HAL_OK`; podany `copied` dostaje liczbę bajtów
+przed terminatorem. `HAL_EINVAL` oznacza brak `input` przy niezerowej
+długości, brak bufora albo zerową pojemność i pozostawia oba wyniki bez zmian.
+
 **Przykład: walidacja tekstu i ponowne zakodowanie pierwszego znaku**
 
 Dla bajtów E2 82 AC, po których występuje A, wynikiem jest trzybajtowy

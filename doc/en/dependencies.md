@@ -25,8 +25,8 @@ another with `JHBASE_HAL_ROOT`. The Unity source hashes are recorded in
 `cmake --install` writes the headers, the static library and a CMake package:
 `find_package(jhbase)` gives `jb::base` and `jb::status`. With `JHBASE_HOST=ON`,
 it also exports the C target `jb::filesystem` and `jb::host`; see
-[filesystem operations](filesystem.md). `JHBASE_ARCHIVE=ON` adds `jb::archive`,
-described below. The package records
+[filesystem operations](filesystem.md). `JHBASE_ARCHIVE=ON` adds `jb::archive`
+and `JHBASE_DOWNLOAD=ON` adds `jb::download`, both described below. The package records
 the library revision in `jhbase_REVISION` and the layout of the public headers
 in `jhbase_ABI_PROFILE`, for example `natural-ptr32-status32-bool8`. The
 revision comes from `JHBASE_REVISION`, otherwise from git HEAD of this
@@ -110,6 +110,38 @@ licenses under `share/jhbase/licenses`. libarchive uses the 2-clause BSD
 license; some files carry a 3-clause UC Regents notice, the public domain or a
 choice of CC0, OpenSSL and Apache 2.0, as its [COPYING](https://github.com/libarchive/libarchive/blob/03036ffa409a2aa1c5bbad35be2202641a040fda/COPYING) lists. zlib uses
 the [zlib license](https://github.com/madler/zlib/blob/99623ef7097352da7993ba614161fd6a311e046e/LICENSE).
+
+## Optional HTTPS downloads
+
+`JHBASE_DOWNLOAD=ON` builds [`jb::download`](download.md) and needs
+`JHBASE_HOST=ON`. It links an unmodified curl 8.23.0 checkout ignored by Git;
+its [pin](../../third_party/curl_version.conf) records the repository and the
+full commit of the release tag. Prepare it with `./scripts/ensure_tools.sh curl`,
+which runs `scripts/ensure_curl.cmake`; `-DJB_VERIFY_ONLY=ON` checks without
+downloading. Configure and every build of the module verify revision, origin,
+clean state and source bytes, as for the other pins. Every prepared checkout
+turns off the attribute conversions of the upstream `.gitattributes`, so files
+that curl marks for CRLF keep the bytes of the pinned commit.
+
+curl builds through its own CMake files as a static library, added from a
+function that selects the TLS backend instead of detecting it: Schannel on
+Windows, the system OpenSSL on Linux. Install the OpenSSL development package
+(`libssl-dev` on Debian and Ubuntu) and `ca-certificates` before configuring.
+The function enables the threaded resolver and IPv6. It turns off the curl
+tool, tests, examples, documentation, all protocols except HTTP and HTTPS,
+compression (zlib, brotli, zstd), HTTP/2 and HTTP/3, IDN, public suffix
+lists, SSH, LDAP, cookies, the HSTS and alt-svc caches, netrc, and Digest,
+Kerberos, NTLM and Negotiate authentication; Basic stays for proxy credentials. Configure stops when curl reports other
+protocols, lacks asynchronous DNS, TLS or thread safety, or enables one of the
+turned-off features. On Linux it also stops when curl finds no system CA
+bundle or directory, and prints the store it found otherwise.
+
+A full install exports `jb::download` together with `jb::libcurl`, whose file
+is named `jb_libcurl`, and ships curl's license under
+`share/jhbase/licenses/curl`. On Linux the package configuration finds
+OpenSSL and Threads again, because the static libcurl links them. curl uses
+the MIT-style [curl license](https://github.com/curl/curl/blob/3163ec065643ba20709f190111f42c3e1fe95273/COPYING).
+A newer libcurl reaches a program only after it is linked again.
 
 ## Buffered Ryu output
 

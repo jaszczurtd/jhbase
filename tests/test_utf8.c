@@ -159,6 +159,47 @@ static void test_argument_validation_and_empty_input(void) {
   TEST_ASSERT_EQUAL(HAL_OK, jb_utf8_validate("abc", 3, NULL));
 }
 
+static void test_copy_valid_prefix_stops_at_errors_and_scalar_boundaries(void) {
+  /* a b EURO SIGN c: the euro sign takes bytes 2 through 4. */
+  static const char text[] = "ab\xE2\x82\xAC"
+                             "c";
+  char out[8];
+  size_t copied = 99u;
+  TEST_ASSERT_EQUAL(HAL_OK, jb_utf8_copy_valid_prefix(text, 6u, out, sizeof(out), &copied));
+  TEST_ASSERT_EQUAL_size_t(6u, copied);
+  TEST_ASSERT_EQUAL_STRING(text, out);
+  TEST_ASSERT_EQUAL(HAL_OK, jb_utf8_copy_valid_prefix(text, 6u, out, 6u, &copied));
+  TEST_ASSERT_EQUAL_size_t(5u, copied);
+  TEST_ASSERT_EQUAL_STRING("ab\xE2\x82\xAC", out);
+  for (size_t capacity = 3u; capacity <= 5u; ++capacity) {
+    TEST_ASSERT_EQUAL(HAL_OK, jb_utf8_copy_valid_prefix(text, 6u, out, capacity, &copied));
+    TEST_ASSERT_EQUAL_size_t(2u, copied);
+    TEST_ASSERT_EQUAL_STRING("ab", out);
+  }
+  TEST_ASSERT_EQUAL(HAL_OK, jb_utf8_copy_valid_prefix(text, 6u, out, 1u, &copied));
+  TEST_ASSERT_EQUAL_size_t(0u, copied);
+  TEST_ASSERT_EQUAL_STRING("", out);
+  TEST_ASSERT_EQUAL(HAL_OK, jb_utf8_copy_valid_prefix("ok\xFFmore", 7u, out, sizeof(out), NULL));
+  TEST_ASSERT_EQUAL_STRING("ok", out);
+  TEST_ASSERT_EQUAL(HAL_OK, jb_utf8_copy_valid_prefix("x\xE2\x82", 3u, out, sizeof(out), &copied));
+  TEST_ASSERT_EQUAL_size_t(1u, copied);
+  TEST_ASSERT_EQUAL(HAL_OK, jb_utf8_copy_valid_prefix("a\0b", 3u, out, sizeof(out), &copied));
+  TEST_ASSERT_EQUAL_size_t(3u, copied);
+  TEST_ASSERT_EQUAL_MEMORY("a\0b", out, 4u);
+  TEST_ASSERT_EQUAL(HAL_OK, jb_utf8_copy_valid_prefix(NULL, 0u, out, sizeof(out), &copied));
+  TEST_ASSERT_EQUAL_size_t(0u, copied);
+  TEST_ASSERT_EQUAL_STRING("", out);
+  /* Invalid arguments change nothing. */
+  for (size_t index = 0; index < sizeof(out); ++index)
+    out[index] = 'z';
+  copied = 77u;
+  TEST_ASSERT_EQUAL(HAL_EINVAL, jb_utf8_copy_valid_prefix(NULL, 1u, out, sizeof(out), &copied));
+  TEST_ASSERT_EQUAL(HAL_EINVAL, jb_utf8_copy_valid_prefix(text, 6u, NULL, sizeof(out), &copied));
+  TEST_ASSERT_EQUAL(HAL_EINVAL, jb_utf8_copy_valid_prefix(text, 6u, out, 0u, &copied));
+  TEST_ASSERT_EQUAL_CHAR('z', out[0]);
+  TEST_ASSERT_EQUAL_size_t(77u, copied);
+}
+
 #ifdef JB_TEST_UNICODE
 static int32_t normalization_work[4096];
 
@@ -312,6 +353,7 @@ int main(void) {
   RUN_TEST(test_capacity_is_transactional_and_measurement_is_exact);
   RUN_TEST(test_nul_is_data_and_suffix_is_validated);
   RUN_TEST(test_argument_validation_and_empty_input);
+  RUN_TEST(test_copy_valid_prefix_stops_at_errors_and_scalar_boundaries);
 #ifdef JB_TEST_UNICODE
   RUN_TEST(test_nfc_query_and_embedded_nul);
   RUN_TEST(test_nfc_rejects_bad_input_and_resource_limits);

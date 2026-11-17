@@ -95,4 +95,15 @@ if(JHBASE_INSTALL_LIBRARY)
             DESTINATION "${CMAKE_INSTALL_DATADIR}/jhbase/licenses/zlib"
             COMPONENT jhbase_library)
   endif()
+  if(JHBASE_DOWNLOAD)
+    # The static archive links the libcurl library built here; on Linux it also
+    # links the system OpenSSL, which the package configuration finds again.
+    install(TARGETS jb_download libcurl_static EXPORT jhbaseDownloadTargets
+            ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}" COMPONENT jhbase_library)
+    install(EXPORT jhbaseDownloadTargets NAMESPACE jb:: DESTINATION "${jb_cmake_dir}"
+            COMPONENT jhbase_library)
+    install(FILES "${jb_curl_source}/COPYING"
+            DESTINATION "${CMAKE_INSTALL_DATADIR}/jhbase/licenses/curl"
+            COMPONENT jhbase_library)
+  endif()
 endif()
