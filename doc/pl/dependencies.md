@@ -9,6 +9,9 @@ i nie pobiera ich podczas configure.
 `jb/status.h` zawiera jedyną definicję `hal_status_t` i jego funkcji
 pomocniczych, a `jb/array.h` jedyne `COUNTOF`. JaszczurHAL zależy od jhbase:
 `hal/core/hal_status.h` i `hal/core/hal_array.h` dołączają te nagłówki.
+Tak samo `hal/core/jh_endian.h` i `hal/security/hal_crypto.h` dołączają
+`jb/endian.h` i `jb/sha256.h`, a HAL kompiluje rdzeń SHA-256 do własnych
+bibliotek ([kolejność bajtów i SHA-256](bytes.md)).
 
 `hal_status_t` ma wszędzie 32 bity. W GCC i Clang nagłówek nadaje enumowi
 `mode(SI)`, więc `-fshort-enums`, domyślne w ARM EABI, go nie zmniejsza,
@@ -38,8 +41,9 @@ Plik wersji przyjmuje tylko tę samą wersję minor i tę samą szerokość wska
 Projekt nadrzędny, który dołącza jhbase przez `add_subdirectory`, buduje
 bibliotekę tylko wtedy, gdy linkuje `jb::base`, i nie rejestruje testów jhbase.
 Jego instalacja zapisuje same nagłówki statusów (`abi.h`, `array.h`,
-`status.h`) i pakiet `jb::status`; `JHBASE_INSTALL_LIBRARY=ON` dokłada
-bibliotekę i pozostałe nagłówki.
+`endian.h`, `sha256.h`, `status.h`) i pakiet `jb::status`;
+`JHBASE_INSTALL_LIBRARY=ON` dokłada bibliotekę i pozostałe nagłówki. Kod
+SHA-256 dostarcza wtedy archiwum projektu nadrzędnego.
 
 ## Opcjonalne Unicode
 
@@ -171,7 +175,8 @@ funkcje buforowe.
 Kontrola freestanding szuka symboli alokacji w odwołaniach własnych obiektów
 i kompletnym zlinkowanym programie kontrolnym, w tym Ryu i libc.
 Hostowy test przerywa wykonanie przy malloc/calloc/realloc/free podczas operacji
-JSON, liczb, writera, literałów i opcjonalnego NFC z `tests/library_exercise.h`.
+SHA-256, kolejności bajtów, JSON, liczb, writera, literałów i opcjonalnego NFC
+z `tests/library_exercise.h`.
 Nie wykonuje operacji kontenerów będących właścicielami pamięci: te korzystają
 z jawnie przekazanego alokatora i mają osobne kontrole własności oraz błędów alokacji.
 Program kontrolny ma mapę pamięci tylko do analizy; nie jest firmware

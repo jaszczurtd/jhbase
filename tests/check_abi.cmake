@@ -1,6 +1,9 @@
+# JB_FLAGS: target flags added to every GCC/Clang probe; the freestanding
+# gate stage passes those of each 32-bit profile with its cross compiler.
 file(MAKE_DIRECTORY "${JB_WORK}")
 set(includes "#include \"jb/json.h\"\n#include \"jb/utf8.h\"\n#include \"jb/json_number.h\"\n#include \"jb/json_writer.h\"\n#include \"jb/literal.h\"\n")
 string(APPEND includes "#include \"jb/file.h\"\n#include \"jb/process.h\"\n#include \"jb/json_tree.h\"\n")
+string(APPEND includes "#include \"jb/endian.h\"\n#include \"jb/sha256.h\"\n")
 string(APPEND includes "#include \"jb/allocator.h\"\n#include \"jb/string.h\"\n#include \"jb/vector.h\"\n#include \"jb/map.h\"\n#include \"jb/filesystem.h\"\n")
 
 function(probe name source should_pass language)
@@ -25,7 +28,7 @@ function(probe name source should_pass language)
   else()
     set(args "-std=${standard}" -Wall -Wextra -Werror -pedantic
         "-I${JB_SOURCE}/include" -c
-        "${path}" -o "${JB_WORK}/${name}.o" ${ARGN})
+        "${path}" -o "${JB_WORK}/${name}.o" ${JB_FLAGS} ${ARGN})
     if(language STREQUAL "C99")
       # Preserve the existing GCC/Clang C99 extension compatibility of status.h.
       list(REMOVE_ITEM args -pedantic)
@@ -62,6 +65,12 @@ foreach(language C CXX)
         FALSE "${language}")
   probe("pack_between_${language}"
         "#include \"jb/status.h\"\n#pragma pack(push, 1)\n${includes}#pragma pack(pop)\n"
+        FALSE "${language}")
+  probe("pack_sha256_${language}" "#pragma pack(push, 1)\n#include \"jb/sha256.h\"\n#pragma pack(pop)\n"
+        FALSE "${language}")
+  # On 32-bit targets pack(4) keeps the offsets and the size and lowers only
+  # the alignment, so this probe needs the alignment check.
+  probe("pack4_sha256_${language}" "#pragma pack(push, 4)\n#include \"jb/sha256.h\"\n#pragma pack(pop)\n"
         FALSE "${language}")
   probe("pack_after_json_${language}"
         "#include \"jb/json.h\"\n#pragma pack(push, 1)\n#include \"jb/json_number.h\"\n#include \"jb/json_writer.h\"\n#pragma pack(pop)\n"

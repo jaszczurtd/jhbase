@@ -37,6 +37,7 @@ option(JHBASE_VSCODE_CHECK "Register the VS Code workspace check as a CTest test
 
 include(GNUInstallDirs)
 include(cmake/dependencies.cmake)
+include(cmake/sources.cmake)
 add_library(jb_status INTERFACE)
 add_library(jb::status ALIAS jb_status)
 set_target_properties(jb_status PROPERTIES EXPORT_NAME status)
@@ -49,7 +50,7 @@ target_include_directories(jb_ryu PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_par
 target_compile_definitions(jb_ryu PRIVATE RYU_OPTIMIZE_SIZE RYU_ONLY_64_BIT_OPS NDEBUG)
 add_library(jhbase STATIC src/utf8.c src/json_parse.c src/json_string.c src/json_read.c src/json_pointer.c
   src/number_big.c src/json_number.c src/number_format.c src/json_writer.c src/literal.c
-  src/string.c src/vector.c src/map.c)
+  src/string.c src/vector.c src/map.c ${JHBASE_SHA256_SOURCES})
 target_sources(jhbase PRIVATE $<TARGET_OBJECTS:jb_ryu>)
 target_include_directories(jhbase PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ryu")
 add_library(jb::base ALIAS jhbase)
@@ -287,7 +288,7 @@ if(PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
     set_tests_properties(download PROPERTIES TIMEOUT 300 LABELS "basic")
   endif()
   include(cmake/api_examples.cmake)
-  foreach(name utf8 json numbers writer literals containers map)
+  foreach(name utf8 json numbers writer literals containers map endian sha256)
     add_executable(test_${name} tests/test_${name}.c)
     target_link_libraries(test_${name} PRIVATE jb::base unity)
     jb_warnings(test_${name})

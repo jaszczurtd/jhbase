@@ -6,11 +6,11 @@ corpora stay below `.build/gate`; the `clean` stage replaces only its own copy.
 
 | Stage | Checks |
 | --- | --- |
-| `host` | GCC Release/LTO, UTF-8/JSON/numeric/writer/literal and container tests, filesystem operations, C++17, independent shortest-format checks, compiled C/C++ literals and examples, ABI rejection probes, C and C++ consumers of the installed package. |
+| `host` | GCC Release/LTO, UTF-8/JSON/numeric/writer/literal, byte-order/SHA-256 and container tests, filesystem operations, C++17, independent shortest-format checks, compiled C/C++ literals and examples, ABI rejection probes, C and C++ consumers of the installed package. |
 | `sanitizers` | Clang ASan, UBSan and LeakSanitizer over library and executables. |
 | `memcheck` | Valgrind over the actual test executables, literal probes and examples. |
 | `fuzz` | Separate seeded libFuzzer runs for parser/UTF-8, exact numbers/literals and writer operations; each has a bounded run count. |
-| `freestanding` | Compile and archive each profile from `scripts/freestanding.sh`, then link an analysis probe. Collect sizes/stack usage and reject heap symbols in owned objects and the complete linked probe. |
+| `freestanding` | Compile and archive each profile from `scripts/freestanding.sh`, then link an analysis probe. Collect sizes/stack usage and reject heap symbols in owned objects and the complete linked probe. Run the ABI rejection probes with the compilers and flags of each profile, because some packing faults change only 32-bit layouts. |
 | `comparison` | Run the pinned coreJSON/yyjson comparison with instrumented upstream sources and the production parser. |
 | `clean` | First configure/build/test from a source copy with spaces and no build state, then an incremental build, all with the oldest supported CMake (`third_party/cmake_minimum_version.conf`); every `cmake_minimum_required` must declare that version. |
 | `analysis` | The cppcheck build pinned by `third_party/cppcheck_version.conf`, checking portable C and host C11/C++17 modules. |
@@ -28,7 +28,7 @@ Freestanding links every profile with and without NFC, checking both for
 allocation symbols. Windows also tests both module settings per architecture.
 
 Required system tools are CMake, Ninja, GCC/G++, Clang/Clang++ 18 with
-libFuzzer, Valgrind, arm-none-eabi GCC/binutils, Java, clang-format, ripgrep,
+libFuzzer, Valgrind, arm-none-eabi GCC/G++ with newlib and libstdc++, binutils, Java, clang-format, ripgrep,
 curl, unzip, tar and Git. Unity, cppcheck, PMD, the RISC-V and Xtensa
 toolchains and the oldest supported CMake are pinned in `third_party/*_version.conf` and installed below `.build/tools` by
 `./scripts/ensure_tools.sh`, which verifies revisions and SHA-256 sums.

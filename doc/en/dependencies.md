@@ -9,6 +9,9 @@ does not download dependencies during configure.
 `jb/status.h` holds the only definition of `hal_status_t` and its helpers, and
 `jb/array.h` the only `COUNTOF`. JaszczurHAL depends on jhbase:
 `hal/core/hal_status.h` and `hal/core/hal_array.h` include these headers.
+`hal/core/jh_endian.h` and `hal/security/hal_crypto.h` likewise include
+`jb/endian.h` and `jb/sha256.h`, and HAL builds the SHA-256 core into its own
+libraries ([byte order and SHA-256](bytes.md)).
 
 `hal_status_t` is 32 bits wide everywhere. On GCC and Clang the header gives
 the enum `mode(SI)`, so `-fshort-enums`, the ARM EABI default, leaves it
@@ -36,9 +39,10 @@ pointer width.
 
 A parent project that adds jhbase with `add_subdirectory` builds the library
 only when it links `jb::base`, and registers no jhbase tests. Its install
-writes just the status headers (`abi.h`, `array.h`, `status.h`) and the
-`jb::status` package; `JHBASE_INSTALL_LIBRARY=ON` adds the library and the
-remaining headers.
+writes just the status headers (`abi.h`, `array.h`, `endian.h`, `sha256.h`,
+`status.h`) and the `jb::status` package; `JHBASE_INSTALL_LIBRARY=ON` adds the
+library and the remaining headers. The parent supplies the SHA-256 code in its
+own archive.
 
 ## Optional Unicode
 
@@ -167,8 +171,9 @@ conversion path; instrumented tests exercise the actual buffered functions.
 
 The freestanding check examines owned object references and the complete
 linked analysis probe, including Ryu and libc, for allocation symbols. The host
-allocation guard aborts on malloc/calloc/realloc/free while running the JSON,
-numeric, writer, literal and optional NFC operations in `tests/library_exercise.h`.
+allocation guard aborts on malloc/calloc/realloc/free while running the SHA-256,
+byte-order, JSON, numeric, writer, literal and optional NFC operations in
+`tests/library_exercise.h`.
 It does not exercise the owned containers: those use an explicitly supplied
 allocator and have separate ownership and allocation-failure checks.
 The link probe has an analysis-only memory map; it is not flashable firmware.

@@ -11,7 +11,10 @@ z jawnych alokatorów. [Operacje systemu plików](doc/pl/filesystem.md) mają
 implementację C11 dla Linuksa i Windows.
 
 jhbase definiuje kody statusów (`jb/status.h`) i `COUNTOF` (`jb/array.h`),
-z których korzysta JaszczurHAL. Biblioteka nie konfiguruje ani nie linkuje HAL.
+z których korzysta JaszczurHAL. HAL używa też jej
+[funkcji kolejności bajtów i rdzenia SHA-256](doc/pl/bytes.md); rdzeń
+kompiluje do swoich bibliotek firmware.
+Biblioteka nie konfiguruje ani nie linkuje HAL.
 
 Do kompilacji potrzebne są CMake co najmniej 3.22 i kompilator C11/C++17,
 po wcześniejszym `./scripts/ensure_tools.sh unity`:

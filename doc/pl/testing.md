@@ -7,11 +7,11 @@ wyłącznie własną kopię źródeł.
 
 | Etap | Kontrole |
 | --- | --- |
-| `host` | GCC Release/LTO, testy UTF-8/JSON/liczb/writera/literałów i kontenerów, operacje systemu plików, C++17, niezależna kontrola najkrótszego zapisu, kompilowane literały i przykłady C/C++, odrzucanie błędnego ABI, przykładowe aplikacje C i C++ korzystające z zainstalowanego pakietu. |
+| `host` | GCC Release/LTO, testy UTF-8/JSON/liczb/writera/literałów, kolejności bajtów/SHA-256 i kontenerów, operacje systemu plików, C++17, niezależna kontrola najkrótszego zapisu, kompilowane literały i przykłady C/C++, odrzucanie błędnego ABI, przykładowe aplikacje C i C++ korzystające z zainstalowanego pakietu. |
 | `sanitizers` | Clang ASan, UBSan i LeakSanitizer obejmujące bibliotekę i programy testowe. |
 | `memcheck` | Valgrind uruchamia programy testowe, programy sprawdzające literały i przykłady. |
 | `fuzz` | Osobne przebiegi libFuzzer z ustalonym seedem dla parsera/UTF-8, dokładnych liczb/literałów i operacji writera; każdy ma ograniczoną liczbę prób. |
-| `freestanding` | Buduje archiwa profili z `scripts/freestanding.sh` i linkuje program kontrolny. Zapisuje rozmiary i użycie stosu, odrzuca symbole alokacji we własnych obiektach i kompletnym programie. |
+| `freestanding` | Buduje archiwa profili z `scripts/freestanding.sh` i linkuje program kontrolny. Zapisuje rozmiary i użycie stosu, odrzuca symbole alokacji we własnych obiektach i kompletnym programie. Uruchamia próby odrzucania błędnego ABI kompilatorami i flagami każdego profilu, bo część błędów pakowania zmienia tylko układ 32-bitowy. |
 | `comparison` | Przypięte porównanie coreJSON/yyjson z instrumentacją źródeł upstream i właściwego parsera. |
 | `clean` | Pierwszy configure/build/test w kopii źródeł ze spacjami, bez stanu buildu, potem build przyrostowy; wszystko najstarszym obsługiwanym CMake (`third_party/cmake_minimum_version.conf`). Każde `cmake_minimum_required` musi deklarować tę wersję. |
 | `analysis` | cppcheck w wersji z `third_party/cppcheck_version.conf` sprawdza przenośne moduły C i hostowe moduły C11/C++17. |
@@ -22,7 +22,7 @@ M4 (STM32G474, hard-float), RP2350 RISC-V i ESP32-S3 (Xtensa). Każdy używa
 flag maszynowych firmware swojej platformy.
 
 Potrzebne narzędzia systemowe to CMake, Ninja, GCC/G++, Clang/Clang++ 18
-z libFuzzer, Valgrind, arm-none-eabi GCC/binutils, Java, clang-format, ripgrep,
+z libFuzzer, Valgrind, arm-none-eabi GCC/G++ z newlib i libstdc++, binutils, Java, clang-format, ripgrep,
 curl, unzip, tar i Git. Unity, cppcheck, PMD, toolchainy RISC-V i Xtensa
 oraz najstarszy obsługiwany CMake są przypięte w `third_party/*_version.conf`; `./scripts/ensure_tools.sh` instaluje je
 w `.build/tools`, sprawdzając rewizje i sumy SHA-256. Bramka tylko sprawdza

@@ -1,7 +1,9 @@
 # Installation and the exported CMake package. The status headers and
 # jb::status always install, so a parent project (HAL) ships the one copy of
-# them inside its own package. The static library and the remaining headers
-# install with a standalone build or when JHBASE_INSTALL_LIBRARY is set.
+# them inside its own package. They include the headers of the SHA-256 core
+# and the endian helpers: HAL headers include them and HAL builds the core into
+# its own archive. The static library and the remaining headers install with a
+# standalone build or when JHBASE_INSTALL_LIBRARY is set.
 include(CMakePackageConfigHelpers)
 option(JHBASE_INSTALL_LIBRARY "Install the static library and all public headers"
        ${PROJECT_IS_TOP_LEVEL})
@@ -39,7 +41,7 @@ math(EXPR jb_pointer_bits "${CMAKE_SIZEOF_VOID_P} * 8")
 set(jb_abi_profile "natural-ptr${jb_pointer_bits}-status32-bool8")
 
 set(jb_cmake_dir "${CMAKE_INSTALL_LIBDIR}/cmake/jhbase")
-set(jb_status_headers abi.h array.h status.h)
+set(jb_status_headers abi.h array.h endian.h sha256.h status.h)
 list(TRANSFORM jb_status_headers PREPEND "${PROJECT_SOURCE_DIR}/include/jb/")
 install(FILES ${jb_status_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/jb"
         COMPONENT jhbase_status)

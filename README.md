@@ -10,7 +10,9 @@ allocators. [Filesystem operations](doc/en/filesystem.md) provide a C11
 implementation for Linux and Windows.
 
 jhbase defines the status codes (`jb/status.h`) and `COUNTOF` (`jb/array.h`)
-used by JaszczurHAL. The library does not configure or link HAL.
+used by JaszczurHAL. Its [byte-order helpers and SHA-256 core](doc/en/bytes.md)
+are also used by HAL, which builds the core into its firmware libraries.
+The library does not configure or link HAL.
 
 Build with CMake 3.22 or later and a C11/C++17 compiler, after
 `./scripts/ensure_tools.sh unity`:

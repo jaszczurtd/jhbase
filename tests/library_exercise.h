@@ -1,9 +1,11 @@
 #ifndef JB_LIBRARY_EXERCISE_H
 #define JB_LIBRARY_EXERCISE_H
+#include "jb/endian.h"
 #include "jb/json_number.h"
 #include "jb/json_pointer.h"
 #include "jb/json_writer.h"
 #include "jb/literal.h"
+#include "jb/sha256.h"
 #include <jb/array.h>
 #ifdef JB_TEST_UNICODE
 #include "jb/unicode.h"
@@ -22,6 +24,14 @@ static inline int library_exercise(void) {
     return 8;
   }
 #endif
+  static jb_sha256_context_t sha;
+  uint8_t digest[JB_SHA256_DIGEST_BYTES];
+  jb_sha256_init(&sha);
+  jb_sha256_update(&sha, (const uint8_t *)"abc", 3u);
+  jb_sha256_final(&sha, digest);
+  if (jb_load_be32(digest) != 0xba7816bfu || jb_load_le16(digest + 30) != 0xad15u) {
+    return 10;
+  }
   static const char input[] = "{\"id\":18446744073709551615,\"gain\":0.22,\"unit\":\"V\"}";
   static jb_json_token_t tokens[4];
   static unsigned char parsing[256], numbers[4096], writing[512];

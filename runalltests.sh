@@ -139,7 +139,8 @@ sanitizers() {
 
 memcheck() {
   configure "${JB_GATE}/memcheck" -DJHBASE_LTO=ON -DJHBASE_UNICODE=ON
-  for jb_test in test_utf8 test_json test_numbers test_writer test_containers test_map test_cxx test_float_format test_allocation \
+  for jb_test in test_utf8 test_json test_numbers test_writer test_containers test_map test_endian \
+      test_sha256 test_cxx test_float_format test_allocation \
       test_literal_probe_c test_literal_probe_cpp example_json_numbers_c \
       example_json_numbers_cpp example_json_writer_c example_json_writer_cpp \
       example_containers_c example_containers_cpp \
@@ -200,10 +201,22 @@ freestanding_profile() {
   "${JB_PROFILE_TOOL}-size" "${jb_directory}/link_probe.elf" > "${jb_directory}/linked-probe-size.txt"
 }
 
+# The ABI probes of the host stage with the compilers and flags of a profile:
+# some layout faults (pack(4) on a uint64_t member) exist only on 32 bits.
+freestanding_abi() {
+  local jb_flags
+  jb_profile "$1"
+  jb_flags="$(IFS=';'; printf '%s' "${JB_PROFILE_FLAGS[*]}")"
+  cmake "-DJB_SOURCE=${JB_ROOT}" "-DJB_WORK=${JB_GATE}/arm/$1-abi" \
+    "-DJB_CC=${JB_PROFILE_TOOL}-gcc" "-DJB_CXX=${JB_PROFILE_TOOL}-g++" -DJB_MSVC=OFF \
+    "-DJB_FLAGS=${jb_flags}" -P "${JB_ROOT}/tests/check_abi.cmake"
+}
+
 freestanding() {
   for jb_name in "${JB_PROFILES[@]}"; do
     freestanding_profile "$jb_name"
     freestanding_profile "$jb_name" unicode
+    freestanding_abi "$jb_name"
   done
 }
 

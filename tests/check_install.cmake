@@ -176,7 +176,7 @@ endif()
 # the status headers and, with LIBRARY, the static library.
 function(consumer name prefix library)
   set(dir "${JB_WORK}/${name}")
-  set(code "#include <jb/array.h>\n#include <jb/status.h>\n")
+  set(code "#include <jb/array.h>\n#include <jb/endian.h>\n#include <jb/sha256.h>\n#include <jb/status.h>\n")
   if(library)
     string(APPEND code "#include <jb/utf8.h>\n#include <jb/json_pointer.h>\n"
       "#include <jb/string.h>\n#include <jb/vector.h>\n#include <jb/map.h>\n")
@@ -198,6 +198,16 @@ function(consumer name prefix library)
   endif()
   string(APPEND code "int main(void) {\n  static const char text[] = \"ok\";\n"
     "  hal_status_t status = (COUNTOF(text) == 3u) ? HAL_OK : HAL_EINVAL;\n")
+  # The status component ships the SHA-256 header for code that builds the
+  # core itself; the library consumer links the core from the archive.
+  string(APPEND code "  uint8_t bytes[4];\n  static jb_sha256_context_t unused_context;\n"
+    "  jb_store_be32(bytes, 0x01020304u);\n"
+    "  if (jb_load_le32(bytes) != 0x04030201u || unused_context.initialized) return 12;\n")
+  if(library)
+    string(APPEND code "  jb_sha256_context_t sha;\n  uint8_t digest[JB_SHA256_DIGEST_BYTES];\n"
+      "  jb_sha256_init(&sha);\n  jb_sha256_final(&sha, digest);\n"
+      "  if (jb_load_be32(digest) != 0xe3b0c442u) return 13;\n")
+  endif()
   if(library)
     if(JB_HOST)
       string(APPEND code "  static jb_string_t owned_text;\n"
