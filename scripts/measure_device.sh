@@ -80,11 +80,12 @@ jb_profile_compile "$jb_profile_name" "${jb_dir}/lib"
 jb_includes="${JB_ROOT}/include;${jb_dir}/generated"
 case "$jb_target" in
   esp32s3)
-    jb_esp=(python3 "${JB_HAL}/scripts/build_esp_idf.py" --project "$jb_project"
+    jb_esp=(--project "$jb_project"
       --assembly "$jb_assembly" --target esp32s3 --name jhbase_device
       --output "${jb_dir}/esp-idf" --link-library "${jb_dir}/lib/libjhbase.a"
       --include-dir "${JB_ROOT}/include" --include-dir "${jb_dir}/generated")
-    "${jb_esp[0]}" "${jb_esp[1]}" build "${jb_esp[@]:2}"
+    # HAL builds ESP-IDF firmware natively (jh esp)
+    "${JB_HAL}/scripts/jh" esp build --root "$JB_HAL" "${jb_esp[@]}"
     jb_map="$(find "${jb_dir}/esp-idf" -name 'jhbase_device.map' -print -quit)"
     # The archive comes from the jhbase pin; ESP-IDF must use the same GCC.
     find "${jb_dir}/esp-idf" -name compile_commands.json -print0 |
@@ -184,7 +185,7 @@ case "$jb_target" in
     ((jb_loaded)) || fail "No ${jb_target} board with serial ${jb_serial} in BOOTSEL" ;;
   stm32g474) openocd -f interface/stlink.cfg -f target/stm32g4x.cfg \
     -c "program ${jb_dir}/artifacts/firmware.elf verify reset exit" ;;
-  esp32s3) "${jb_esp[0]}" "${jb_esp[1]}" flash "${jb_esp[@]:2}" --port "$jb_port" ;;
+  esp32s3) python3 "${JB_HAL}/scripts/build_esp_idf.py" flash "${jb_esp[@]}" --port "$jb_port" ;;
 esac
 [[ -n "$jb_port" ]] || jb_port="$(find_port)"
 stty -F "$jb_port" 115200 raw -echo
