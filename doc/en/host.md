@@ -134,10 +134,11 @@ not launch persistent background services.
 On Linux, cancellation of a child that has already executed starts with the
 SIGINT a terminal Ctrl+C would deliver: the API signals the child's process
 group, discards its output and waits until the main process has exited and
-every writer has closed the pipes, for at most 5 seconds, before it kills the
-group. A program such as ninja, whose jobs run in their own process groups,
-stops those jobs itself on SIGINT; the group kill alone would leave them
-running. Timeouts and callback errors kill the group at once.
+every writer has closed the pipes, before it kills the group. The wait lasts at
+most 5 seconds and ends earlier when the timeout runs out. A program such as
+ninja, whose jobs run in their own process groups, stops those jobs itself on
+SIGINT; the group kill alone would leave them running. Timeouts and callback
+errors kill the group at once.
 
 Linux descendants that deliberately change their group/session escape ownership;
 the API does not provide sandboxing. Windows assigns the suspended child to

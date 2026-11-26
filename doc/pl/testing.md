@@ -135,7 +135,7 @@ uniemożliwić zapis, także po normalnym wyjściu procesu głównego. Linux spr
 też zakończenie sygnałem i uruchamianie z zamkniętymi standardowymi deskryptorami.
 Przypadki anulowania odwzorowują `cmake --build` z ninja: proces główny ginie od
 SIGINT, inny proces jego grupy zatrzymuje potomka we własnej grupie procesów,
-a drzewo ignorujące SIGINT ginie po okresie oczekiwania.
+a drzewo ignorujące SIGINT ginie, gdy timeout skróci okres oczekiwania.
 Scenariusze należą do istniejących konfiguracji hosta, sanitizerów, memcheck i Windows.
 
 ## Testy archiwów

@@ -135,8 +135,9 @@ uruchamiania trwałych usług w tle.
 
 Na Linuksie anulowanie potomka, który już wykonał exec, zaczyna się od SIGINT,
 jaki dostarczyłoby Ctrl+C w terminalu: API wysyła go do grupy procesów
-potomka, odrzuca jego wyjście i czeka najwyżej 5 sekund, aż proces główny
-się zakończy, a wszyscy piszący zamkną potoki. Dopiero potem zabija grupę.
+potomka, odrzuca jego wyjście i czeka, aż proces główny się zakończy, a wszyscy
+piszący zamkną potoki. Dopiero potem zabija grupę. Czeka najwyżej 5 sekund,
+a krócej, gdy wcześniej skończy się timeout.
 Program taki jak ninja, którego zadania działają we własnych grupach procesów,
 po SIGINT sam je zatrzymuje; samo zabicie grupy zostawiłoby je uruchomione.
 Timeout i błąd callbacka zabijają grupę od razu.

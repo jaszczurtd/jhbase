@@ -80,8 +80,9 @@ typedef struct {
  * still stop the call immediately. Partial output may be discarded on stop/error.
  * On Linux, cancellation of an executed child first sends SIGINT to its process group
  * and discards output until the main process has exited and all writers have closed the
- * pipes, at most 5 s, before terminating the group: the child can stop descendants in
- * other process groups (e.g. ninja jobs). Timeouts and callback errors do not wait.
+ * pipes, at most 5 s and never past timeout_ms, before terminating the group: the child can
+ * stop descendants in other process groups (e.g. ninja jobs). Timeouts and callback errors
+ * do not wait.
  * Linux uses PR_SET_PDEATHSIG(SIGKILL) and checks getppid after setting it:
  * death of the launching thread kills the direct child, not its descendants.
  * The setting is cleared by a child fork and may be cleared by privileged exec

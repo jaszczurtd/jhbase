@@ -74,6 +74,11 @@ struct control {
       return HAL_ETIMEOUT;
     return HAL_OK;
   }
+  // The end of the timeout budget; the latest time point without a timeout.
+  clock_type::time_point deadline() const {
+    return options.timeout_ms != 0 ? start + std::chrono::milliseconds(options.timeout_ms)
+                                   : clock_type::time_point::max();
+  }
   void check() const {
     const auto stopped = status();
     if (stopped != HAL_OK)
@@ -408,13 +413,15 @@ struct child {
 // it, so the child can stop descendants in their own process groups, such as
 // ninja jobs, which the group SIGKILL of collect() does not reach. Output is
 // discarded until the main process has exited and every writer has closed the
-// pipes, for at most this long; collect() then kills what is left.
+// pipes, for at most this long and never past limit, the end of the timeout
+// budget; collect() then kills what is left.
 constexpr auto interrupt_grace = std::chrono::seconds(5);
 
-void interrupt(pid_t pid, descriptor (&output)[2][2], bool (&alive)[2]) {
+void interrupt(pid_t pid, descriptor (&output)[2][2], bool (&alive)[2],
+               clock_type::time_point limit) {
   if (::kill(-pid, SIGINT) != 0)
     return;
-  const auto deadline = clock_type::now() + interrupt_grace;
+  const auto deadline = std::min(clock_type::now() + interrupt_grace, limit);
   bool exited = false;
   while (clock_type::now() < deadline) {
     exited = exited || child_exited(pid, false);
@@ -586,7 +593,7 @@ void run(const request &req, const control &ctl, jb_process_result_t &result) {
       if (!result.exited) {
         // Before exec the child still runs the caller's signal handlers.
         if (stopped == HAL_ECANCELED && !launch_pending)
-          interrupt(pid, output, alive);
+          interrupt(pid, output, alive, ctl.deadline());
         throw failure{stopped};
       }
       continue;

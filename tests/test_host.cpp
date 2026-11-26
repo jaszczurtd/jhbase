@@ -911,6 +911,8 @@ struct process_capture {
   size_t count[2]{};
   bool invalid = false, cancel = false, stop_on_output = false;
   bool check_bytes = false;
+  // cancel_process reports cancellation after output and from this time on.
+  std::chrono::steady_clock::time_point cancel_at{};
 };
 static hal_status_t capture_output(void *context, jb_process_stream_t stream,
                                    const unsigned char *bytes, size_t length) {
@@ -924,7 +926,8 @@ static hal_status_t capture_output(void *context, jb_process_stream_t stream,
   return capture.stop_on_output ? HAL_EBUSY : HAL_OK;
 }
 static bool cancel_process(void *context) {
-  return static_cast<process_capture *>(context)->cancel;
+  const auto &capture = *static_cast<process_capture *>(context);
+  return capture.cancel && std::chrono::steady_clock::now() >= capture.cancel_at;
 }
 static jb_process_options_t process_options(const char *const *args, const std::string &cwd) {
   jb_process_options_t options{};
@@ -1118,7 +1121,8 @@ static void test_process_parallel_calls_empty_environment_and_signals() {
 static void test_process_stops_descendants_and_handles_inherited_pipes() {
   const std::string cwd = root.u8string();
   // Linux also cancels a child that stops a descendant in its own process
-  // group on SIGINT, and a tree that ignores SIGINT until the group is killed.
+  // group on SIGINT, and a tree that ignores SIGINT until the group is killed:
+  // canceled 1 s before its timeout, which ends the 5 s grace period early.
   const char *const modes[] = {"tree", "tree", "tree", "tree-exit", "tree-group", "tree-ignore"};
 #ifdef _WIN32
   const unsigned scenarios = 4;
@@ -1143,6 +1147,10 @@ static void test_process_stops_descendants_and_handles_inherited_pipes() {
       options.canceled = cancel_process;
     jb_process_result_t result{};
     const auto started = std::chrono::steady_clock::now();
+    if (scenario == 5) {
+      options.timeout_ms = 6000;
+      capture.cancel_at = started + std::chrono::seconds(5);
+    }
     const auto status = jb_process_run(&options, &result);
     TEST_ASSERT_EQUAL(scenario == 0   ? HAL_ETIMEOUT
                       : cancel        ? HAL_ECANCELED
@@ -1155,7 +1163,8 @@ static void test_process_stops_descendants_and_handles_inherited_pipes() {
       TEST_ASSERT_EQUAL(SIGINT, result.term_signal);
     if (scenario == 5) {
       TEST_ASSERT_EQUAL(SIGKILL, result.term_signal);
-      TEST_ASSERT_TRUE(std::chrono::steady_clock::now() - started < std::chrono::seconds(10));
+      // Killed at the timeout, 6 s, not after the whole grace period, 10 s.
+      TEST_ASSERT_TRUE(std::chrono::steady_clock::now() - started < std::chrono::seconds(8));
     }
 #else
     (void)started;

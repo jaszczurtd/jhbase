@@ -132,7 +132,8 @@ that write, including after normal main-process exit. Linux also checks signal
 termination and launching with closed standard descriptors. Its cancellation
 cases model `cmake --build` running ninja: the main process dies on SIGINT,
 another process of its group stops a descendant in its own process group, and
-a tree that ignores SIGINT is killed after the grace period. These cases run
+a tree that ignores SIGINT is killed when its timeout ends the grace period
+early. These cases run
 through the existing host, sanitizer, memcheck and Windows configurations.
 
 ## Archive tests
