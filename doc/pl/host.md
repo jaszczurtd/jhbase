@@ -133,6 +133,14 @@ pomijane. Drenowanie może skończyć się po deadline; błąd callbacka wyjści
 zatrzymuje wywołanie natychmiast. Dane pozostałe po zatrzymaniu mogą zostać odrzucone. API nie służy zatem do
 uruchamiania trwałych usług w tle.
 
+Na Linuksie anulowanie potomka, który już wykonał exec, zaczyna się od SIGINT,
+jaki dostarczyłoby Ctrl+C w terminalu: API wysyła go do grupy procesów
+potomka, odrzuca jego wyjście i czeka najwyżej 5 sekund, aż proces główny
+się zakończy, a wszyscy piszący zamkną potoki. Dopiero potem zabija grupę.
+Program taki jak ninja, którego zadania działają we własnych grupach procesów,
+po SIGINT sam je zatrzymuje; samo zabicie grupy zostawiłoby je uruchomione.
+Timeout i błąd callbacka zabijają grupę od razu.
+
 Potomek Linuksa, który celowo zmienia grupę lub sesję, opuszcza nadzór; API
 nie zapewnia sandboxingu. Windows przypisuje wstrzymany proces do joba przed
 rozpoczęciem wykonania i nie pozwala na breakaway. Pozostałe odziedziczone

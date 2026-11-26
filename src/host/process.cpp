@@ -404,6 +404,41 @@ struct child {
   }
 };
 
+// Cancellation first gives the group the SIGINT a terminal Ctrl+C would give
+// it, so the child can stop descendants in their own process groups, such as
+// ninja jobs, which the group SIGKILL of collect() does not reach. Output is
+// discarded until the main process has exited and every writer has closed the
+// pipes, for at most this long; collect() then kills what is left.
+constexpr auto interrupt_grace = std::chrono::seconds(5);
+
+void interrupt(pid_t pid, descriptor (&output)[2][2], bool (&alive)[2]) {
+  if (::kill(-pid, SIGINT) != 0)
+    return;
+  const auto deadline = clock_type::now() + interrupt_grace;
+  bool exited = false;
+  while (clock_type::now() < deadline) {
+    exited = exited || child_exited(pid, false);
+    if (exited && !alive[0] && !alive[1])
+      return;
+    pollfd pending[2] = {{alive[0] ? output[0][0].value : -1, POLLIN, 0},
+                         {alive[1] ? output[1][0].value : -1, POLLIN, 0}};
+    if (::poll(pending, 2, 5) < 0 && errno != EINTR)
+      io_error();
+    for (unsigned i = 0; i < 2; ++i) {
+      if (!alive[i])
+        continue;
+      unsigned char buffer[4096];
+      const ssize_t count = ::read(output[i][0].value, buffer, sizeof(buffer));
+      if (count == 0) {
+        alive[i] = false;
+        output[i][0].close();
+      } else if (count < 0 && errno != EINTR && errno != EAGAIN) {
+        io_error();
+      }
+    }
+  }
+}
+
 [[noreturn]] void child_error(int fd) {
   const int error = errno;
   ssize_t count;
@@ -548,8 +583,12 @@ void run(const request &req, const control &ctl, jb_process_result_t &result) {
     const auto stopped = ctl.status();
     if (stopped != HAL_OK) {
       observe();
-      if (!result.exited)
+      if (!result.exited) {
+        // Before exec the child still runs the caller's signal handlers.
+        if (stopped == HAL_ECANCELED && !launch_pending)
+          interrupt(pid, output, alive);
         throw failure{stopped};
+      }
       continue;
     }
     pollfd pending[3] = {{alive[0] ? output[0][0].value : -1, POLLIN, 0},

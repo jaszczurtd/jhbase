@@ -129,7 +129,10 @@ UTF-8 environment/cwd, simultaneous binary stdout/stderr, parallel calls,
 startup failures, cancellation, timeout and output callback errors. A descendant
 holds the output pipes and attempts a delayed write: termination must prevent
 that write, including after normal main-process exit. Linux also checks signal
-termination and launching with closed standard descriptors. These cases run
+termination and launching with closed standard descriptors. Its cancellation
+cases model `cmake --build` running ninja: the main process dies on SIGINT,
+another process of its group stops a descendant in its own process group, and
+a tree that ignores SIGINT is killed after the grace period. These cases run
 through the existing host, sanitizer, memcheck and Windows configurations.
 
 ## Archive tests

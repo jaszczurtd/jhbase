@@ -133,6 +133,9 @@ błędy uruchomienia, anulowanie, timeout i błędy callbacka wyjścia. Potomek
 utrzymuje otwarte potoki i próbuje opóźnionego zapisu: zakończenie musi
 uniemożliwić zapis, także po normalnym wyjściu procesu głównego. Linux sprawdza
 też zakończenie sygnałem i uruchamianie z zamkniętymi standardowymi deskryptorami.
+Przypadki anulowania odwzorowują `cmake --build` z ninja: proces główny ginie od
+SIGINT, inny proces jego grupy zatrzymuje potomka we własnej grupie procesów,
+a drzewo ignorujące SIGINT ginie po okresie oczekiwania.
 Scenariusze należą do istniejących konfiguracji hosta, sanitizerów, memcheck i Windows.
 
 ## Testy archiwów

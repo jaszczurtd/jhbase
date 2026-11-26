@@ -78,17 +78,22 @@ typedef struct {
  * child exits naturally during cleanup (exited=true, term_signal=0 on Linux).
  * Cleanup errors also retain the collected main-process result. Output callback errors
  * still stop the call immediately. Partial output may be discarded on stop/error.
+ * On Linux, cancellation of an executed child first sends SIGINT to its process group
+ * and discards output until the main process has exited and all writers have closed the
+ * pipes, at most 5 s, before terminating the group: the child can stop descendants in
+ * other process groups (e.g. ninja jobs). Timeouts and callback errors do not wait.
  * Linux uses PR_SET_PDEATHSIG(SIGKILL) and checks getppid after setting it:
  * death of the launching thread kills the direct child, not its descendants.
  * The setting is cleared by a child fork and may be cleared by privileged exec
  * or credential changes. Windows job closure covers all job members instead.
  * The caller must use cancellation for graceful SIGINT handling; the library
  * installs no parent signal handlers. Linux descendants that deliberately leave their process group
- * escape ownership; this is not a sandbox. Windows descendants cannot break away from the job.
- * Grandchildren are reaped by their OS parent, not this API. Linux requires the caller not to
- * ignore SIGCHLD, set SA_NOCLDWAIT or reap this child elsewhere. Startup/OS cleanup and callbacks
- * are not hard real-time. Concurrent mutation of the parent environment during launch is
- * unsupported. No C++ exception crosses this C API. options and result must not overlap.
+ * escape ownership unless the child stops them on SIGINT; this is not a sandbox. Windows
+ * descendants cannot break away from the job. Grandchildren are reaped by their OS parent, not this
+ * API. Linux requires the caller not to ignore SIGCHLD, set SA_NOCLDWAIT or reap this child
+ * elsewhere. Startup/OS cleanup and callbacks are not hard real-time. Concurrent mutation of the
+ * parent environment during launch is unsupported. No C++ exception crosses this C API. options and
+ * result must not overlap.
  */
 hal_status_t jb_process_run(const jb_process_options_t *options, jb_process_result_t *result);
 

@@ -131,6 +131,14 @@ excluded. This drain may finish after the deadline; output callback errors still
 stop immediately. Output remaining on a stopped call may be discarded. This API therefore does
 not launch persistent background services.
 
+On Linux, cancellation of a child that has already executed starts with the
+SIGINT a terminal Ctrl+C would deliver: the API signals the child's process
+group, discards its output and waits until the main process has exited and
+every writer has closed the pipes, for at most 5 seconds, before it kills the
+group. A program such as ninja, whose jobs run in their own process groups,
+stops those jobs itself on SIGINT; the group kill alone would leave them
+running. Timeouts and callback errors kill the group at once.
+
 Linux descendants that deliberately change their group/session escape ownership;
 the API does not provide sandboxing. Windows assigns the suspended child to
 its job before allowing it to run and disallows breakaway. Other inherited

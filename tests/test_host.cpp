@@ -570,6 +570,25 @@ static std::string environment_value(const char *name) {
 #endif
 }
 
+#ifndef _WIN32
+// "tree-group" models cmake --build running ninja: the main process dies on
+// SIGINT at once, while a process of its group (ninja) stops the descendant in
+// its own process group (a job) a moment later and exits after collecting it.
+static volatile pid_t own_group = 0;
+static void stop_own_group(int) {
+  const pid_t group = own_group;
+  const struct timespec delay {
+    0, 200000000
+  };
+  (void)::nanosleep(&delay, nullptr);
+  (void)::kill(-group, SIGINT);
+  int status;
+  while (::waitpid(group, &status, 0) < 0 && errno == EINTR) {
+  }
+  _exit(0);
+}
+#endif
+
 static int missing_exec_check();
 static int busy_exec_check();
 static int process_child(int argc, char **argv) {
@@ -825,7 +844,7 @@ static int process_child(int argc, char **argv) {
     (void)jb_file_write_atomic("descendant-survived", "bad", 3, false, &changed);
     return 0;
   }
-  if (mode == "tree" || mode == "tree-exit") {
+  if (mode == "tree" || mode == "tree-exit" || mode == "tree-group" || mode == "tree-ignore") {
 #ifdef _WIN32
     const auto exe = fs::u8path(self).wstring();
     std::wstring command = L"\"" + exe + L"\" --child sleeper";
@@ -838,17 +857,45 @@ static int process_child(int argc, char **argv) {
     CloseHandle(info.hThread);
     CloseHandle(info.hProcess);
 #else
-    const pid_t pid = ::fork();
-    if (pid < 0)
+    // In tree-ignore both processes ignore SIGINT. In tree-group a forked
+    // copy of this process runs the descendant (see stop_own_group).
+    if (mode == "tree-ignore")
+      ::signal(SIGINT, SIG_IGN);
+    const bool group = mode == "tree-group";
+    const pid_t forwarder = group ? ::fork() : 0;
+    if (forwarder < 0)
       return 86;
-    if (pid == 0) {
-      ::execl(self.c_str(), self.c_str(), "--child", "sleeper", static_cast<char *>(nullptr));
-      _exit(87);
+    if (forwarder == 0) {
+      const pid_t pid = ::fork();
+      if (pid < 0)
+        _exit(86);
+      if (pid == 0) {
+        if (group)
+          ::setpgid(0, 0);
+        ::execl(self.c_str(), self.c_str(), "--child", "sleeper", static_cast<char *>(nullptr));
+        _exit(87);
+      }
+      if (group) {
+        (void)::setpgid(pid, pid);
+        own_group = pid;
+        struct sigaction action {};
+        action.sa_handler = stop_own_group;
+        bool changed;
+        if (::sigaction(SIGINT, &action, nullptr) != 0 ||
+            jb_file_write_atomic("forwarder-ready", "1", 1, false, &changed) != HAL_OK)
+          _exit(86);
+        pause_ms(10000);
+        _exit(0);
+      }
     }
 #endif
-    for (unsigned i = 0; i < 500 && !fs::exists("descendant-ready"); ++i)
+    const auto ready = [&] {
+      return fs::exists("descendant-ready") &&
+             (mode != "tree-group" || fs::exists("forwarder-ready"));
+    };
+    for (unsigned i = 0; i < 500 && !ready(); ++i)
       pause_ms(5);
-    if (!fs::exists("descendant-ready"))
+    if (!ready())
       return 88;
     std::fputs("READY", stdout);
     std::fflush(stdout);
@@ -1070,28 +1117,49 @@ static void test_process_parallel_calls_empty_environment_and_signals() {
 
 static void test_process_stops_descendants_and_handles_inherited_pipes() {
   const std::string cwd = root.u8string();
-  for (unsigned scenario = 0; scenario < 4; ++scenario) {
+  // Linux also cancels a child that stops a descendant in its own process
+  // group on SIGINT, and a tree that ignores SIGINT until the group is killed.
+  const char *const modes[] = {"tree", "tree", "tree", "tree-exit", "tree-group", "tree-ignore"};
+#ifdef _WIN32
+  const unsigned scenarios = 4;
+#else
+  const unsigned scenarios = 6;
+#endif
+  for (unsigned scenario = 0; scenario < scenarios; ++scenario) {
     fs::remove(root / "descendant-ready");
     fs::remove(root / "descendant-survived");
     fs::remove(root / "allow-descendant-exit");
-    const char *args[] = {"--child", scenario == 3 ? "tree-exit" : "tree", nullptr};
+    fs::remove(root / "forwarder-ready");
+    const char *args[] = {"--child", modes[scenario], nullptr};
     auto options = process_options(args, cwd);
     process_capture capture;
     capture.stop_on_output = scenario == 2;
     options.context = &capture;
     options.output = capture_output;
+    const bool cancel = scenario == 1 || scenario >= 4;
     if (scenario == 0)
       options.timeout_ms = 5000;
-    if (scenario == 1)
+    if (cancel)
       options.canceled = cancel_process;
     jb_process_result_t result{};
+    const auto started = std::chrono::steady_clock::now();
     const auto status = jb_process_run(&options, &result);
     TEST_ASSERT_EQUAL(scenario == 0   ? HAL_ETIMEOUT
-                      : scenario == 1 ? HAL_ECANCELED
+                      : cancel        ? HAL_ECANCELED
                       : scenario == 2 ? HAL_EBUSY
                                       : HAL_OK,
                       status);
     TEST_ASSERT_TRUE(result.started && result.exited);
+#ifndef _WIN32
+    if (scenario == 4) // Interrupted, not killed.
+      TEST_ASSERT_EQUAL(SIGINT, result.term_signal);
+    if (scenario == 5) {
+      TEST_ASSERT_EQUAL(SIGKILL, result.term_signal);
+      TEST_ASSERT_TRUE(std::chrono::steady_clock::now() - started < std::chrono::seconds(10));
+    }
+#else
+    (void)started;
+#endif
     TEST_ASSERT_TRUE(fs::exists(root / "descendant-ready"));
 
     jb_file_data_t pid_bytes{};
